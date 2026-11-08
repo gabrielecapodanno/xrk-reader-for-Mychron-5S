@@ -1,0 +1,1052 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#161a1f" media="(prefers-color-scheme: dark)">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" href="icon-192.png">
+<style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style>
+<title>Telemetria Kart</title>
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Telemetria">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Barlow:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one column on phone (display → giri → mappa → grafici → curve); two columns from 960px. UI chrome is monochrome like the logger screen; color is reserved for data. */
+:root {
+  --bg: #e9edf1; --surface: #ffffff; --surface-2: #f4f6f8; --line: #d6dce3; --line-2: #e6eaef;
+  --fg: #11161c; --fg-2: #4b5562; --fg-3: #7b8592;
+  --ink: #161c23; --ink-fg: #f3f5f7;
+  --lcd: #d3d9cf; --lcd-fg: #1a2018; --lcd-dim: #5c6658; --lcd-line: #b9c1b4;
+  --lap-a: #2a78d6; --lap-b: #eb6834; --gain: #1baf7a; --loss: #e34948; --best: #6250d6; --neutral: #a3a9b0;
+  --ramp-0: #cde2fb; --ramp-1: #86b6ef; --ramp-2: #3987e5; --ramp-3: #1c5cab; --ramp-4: #0d366b;
+  --display: "Barlow Condensed", "Arial Narrow", "Roboto Condensed", sans-serif;
+  --body: "Barlow", -apple-system, "Segoe UI", Roboto, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  --r: 10px;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #0e1114; --surface: #161a1f; --surface-2: #1c2127; --line: #2a3139; --line-2: #222830;
+  --fg: #e8ecf0; --fg-2: #a6afba; --fg-3: #747e8a;
+  --ink: #e8ecf0; --ink-fg: #11161c;
+  --lcd: #1a1f1b; --lcd-fg: #dfe9da; --lcd-dim: #8c9888; --lcd-line: #2c342d;
+  --lap-a: #3987e5; --lap-b: #d95926; --gain: #199e70; --loss: #e66767; --best: #9085e9; --neutral: #5d656e;
+  --ramp-0: #104281; --ramp-1: #1c5cab; --ramp-2: #3987e5; --ramp-3: #86b6ef; --ramp-4: #cde2fb;
+  color-scheme: dark; } }
+:root[data-theme="dark"] {
+  --bg: #0e1114; --surface: #161a1f; --surface-2: #1c2127; --line: #2a3139; --line-2: #222830;
+  --fg: #e8ecf0; --fg-2: #a6afba; --fg-3: #747e8a;
+  --ink: #e8ecf0; --ink-fg: #11161c;
+  --lcd: #1a1f1b; --lcd-fg: #dfe9da; --lcd-dim: #8c9888; --lcd-line: #2c342d;
+  --lap-a: #3987e5; --lap-b: #d95926; --gain: #199e70; --loss: #e66767; --best: #9085e9; --neutral: #5d656e;
+  --ramp-0: #104281; --ramp-1: #1c5cab; --ramp-2: #3987e5; --ramp-3: #86b6ef; --ramp-4: #cde2fb;
+  color-scheme: dark; }
+
+* { box-sizing: border-box; }
+html, body { background: var(--bg); }
+body { color: var(--fg); font-family: var(--body); font-size: 15px; line-height: 1.45; -webkit-text-size-adjust: 100%; }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--surface); }
+button, select, input { font: inherit; color: inherit; }
+.num { font-variant-numeric: tabular-nums; }
+
+/* top bar */
+.bar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--surface); border-bottom: 1px solid var(--line);
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.bar-in { max-width: 1280px; margin: 0 auto; display: flex; align-items: center; gap: 10px; padding-block: 10px; flex-wrap: wrap; }
+.brand { font-family: var(--display); font-weight: 700; font-size: 22px; letter-spacing: .02em; text-transform: uppercase; line-height: 1; margin-right: auto; display: flex; align-items: center; gap: 8px; }
+.brand i { width: 14px; height: 14px; border-radius: 3px; background:
+  conic-gradient(var(--fg) 0 25%, transparent 0 50%, var(--fg) 0 75%, transparent 0) 0 0/7px 7px; border: 1px solid var(--fg); }
+.sess { display: flex; gap: 8px; align-items: center; min-width: 0; flex: 1 1 240px; justify-content: flex-end; }
+select#sessionSel { min-width: 0; flex: 1 1 auto; max-width: 340px; height: 38px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface-2); padding: 0 10px; }
+.btn { height: 38px; padding: 0 14px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface-2); cursor: pointer; white-space: nowrap; font-weight: 600; display: inline-flex; align-items: center; gap: 6px; }
+.btn.primary { background: var(--ink); color: var(--ink-fg); border-color: var(--ink); }
+.btn:focus-visible, .chip:focus-visible, select:focus-visible, .pick:focus-visible { outline: 2px solid var(--lap-a); outline-offset: 2px; }
+#fileIn { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+
+main { max-width: 1280px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 16px 40px; display: grid; gap: 16px; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); min-width: 0; }
+.card-h { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 12px 14px 0; flex-wrap: wrap; }
+h2 { font-family: var(--display); font-weight: 600; font-size: 17px; letter-spacing: .06em; text-transform: uppercase; margin: 0; color: var(--fg-2); }
+.hint { color: var(--fg-3); font-size: 13px; margin: 0; }
+
+/* LCD display */
+.lcd { background: var(--lcd); color: var(--lcd-fg); border-radius: var(--r); padding: 14px 16px 16px; border: 1px solid var(--lcd-line); display: grid; gap: 12px; }
+.lcd-meta { display: flex; flex-wrap: wrap; gap: 4px 14px; font-family: var(--mono); font-size: 12px; color: var(--lcd-dim); text-transform: uppercase; letter-spacing: .04em; }
+.lcd-meta b { color: var(--lcd-fg); font-weight: 500; }
+.lcd-main { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 2fr); gap: 16px; align-items: end; }
+.big-label { font-family: var(--display); font-size: 14px; letter-spacing: .1em; text-transform: uppercase; color: var(--lcd-dim); font-weight: 600; }
+.big { font-family: var(--display); font-weight: 700; font-size: clamp(52px, 13vw, 92px); line-height: .9; letter-spacing: -.01em; font-variant-numeric: tabular-nums; }
+.big small { font-size: .38em; font-weight: 600; color: var(--lcd-dim); margin-left: 6px; letter-spacing: .04em; }
+.stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 14px; }
+.stat { border-top: 1px solid var(--lcd-line); padding-top: 6px; min-width: 0; }
+.stat .k { font-family: var(--display); font-size: 13px; letter-spacing: .08em; text-transform: uppercase; color: var(--lcd-dim); font-weight: 600; }
+.stat .v { font-family: var(--display); font-size: 28px; font-weight: 600; line-height: 1.05; font-variant-numeric: tabular-nums; }
+.stat .v small { font-size: 15px; color: var(--lcd-dim); margin-left: 3px; font-weight: 500; }
+@media (max-width: 620px) { .lcd-main { grid-template-columns: 1fr; } }
+
+/* lap table */
+.tbl-wrap { overflow-x: auto; padding: 8px 0 6px; }
+table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
+th { font-family: var(--display); font-weight: 600; font-size: 13px; letter-spacing: .08em; text-transform: uppercase; color: var(--fg-3); text-align: right; padding: 6px 8px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+td { padding: 7px 8px; text-align: right; border-bottom: 1px solid var(--line-2); white-space: nowrap; font-family: var(--mono); font-size: 13.5px; }
+th:first-child, td:first-child { text-align: left; padding-left: 14px; }
+th:last-child, td:last-child { padding-right: 14px; }
+.tag { display: inline-block; }
+td.lapn { font-family: var(--display); font-size: 17px; font-weight: 600; }
+td.time { font-weight: 500; font-size: 14.5px; }
+tr.is-best td.time { font-weight: 600; }
+tr.muted td { color: var(--fg-3); }
+.tag { font-family: var(--body); font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; border: 1px solid var(--line); border-radius: 4px; padding: 1px 5px; margin-left: 6px; color: var(--fg-3); vertical-align: 2px; }
+.tag.best { border-color: var(--best); color: var(--best); }
+.sec-best { color: var(--best); font-weight: 600; }
+.sec-best::after { content: "●"; font-size: 8px; vertical-align: 3px; margin-left: 3px; }
+.dbar { display: inline-flex; align-items: center; gap: 6px; justify-content: flex-end; }
+.dbar span.b { display: inline-block; height: 6px; border-radius: 0 3px 3px 0; background: var(--neutral); }
+.pick { width: 30px; height: 28px; border-radius: 6px; border: 1px solid var(--line); background: var(--surface-2); cursor: pointer; font-family: var(--display); font-weight: 700; font-size: 15px; color: var(--fg-3); }
+.pick.a.on { background: var(--lap-a); border-color: var(--lap-a); color: #fff; }
+.pick.b.on { background: var(--lap-b); border-color: var(--lap-b); color: #fff; }
+.picks { display: inline-flex; gap: 4px; }
+
+/* analysis grid */
+.ana { display: grid; gap: 16px; grid-template-columns: minmax(0, 1fr); }
+@media (min-width: 960px) { .ana { grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); align-items: start; } .map-card { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 74px); } }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.chip { border: 0; background: var(--surface-2); padding: 6px 11px; font-size: 13px; font-weight: 600; cursor: pointer; color: var(--fg-2); }
+.chip + .chip { border-left: 1px solid var(--line); }
+.chip.on { background: var(--ink); color: var(--ink-fg); }
+canvas { display: block; width: 100%; touch-action: pan-y; }
+.map-wrap { padding: 8px 10px 4px; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 14px; padding: 0 14px 12px; font-size: 13px; color: var(--fg-2); align-items: center; }
+.sw { display: inline-block; width: 18px; height: 3px; border-radius: 2px; vertical-align: middle; margin-right: 5px; }
+.grad { display: inline-block; width: 70px; height: 6px; border-radius: 3px; vertical-align: middle; margin: 0 5px; }
+
+.readout { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 59px); z-index: 4; background: var(--surface); border-bottom: 1px solid var(--line); border-radius: var(--r) var(--r) 0 0;
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(84px, 1fr)); gap: 2px 10px; padding: 10px 14px; }
+.ro .k { font-family: var(--display); font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--fg-3); font-weight: 600; }
+.ro .v { font-family: var(--mono); font-size: 14px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ro .v .a { color: var(--fg); } .ro .v .sep { color: var(--fg-3); margin: 0 3px; }
+.ro .mark { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 4px; vertical-align: 1px; }
+.charts { display: grid; gap: 0; padding-bottom: 8px; }
+.ch { padding: 8px 10px 0 4px; border-bottom: 1px solid var(--line-2); }
+.ch:last-child { border-bottom: 0; }
+.ch-t { display: flex; justify-content: space-between; align-items: baseline; padding: 0 4px 0 12px; }
+.ch-t b { font-family: var(--display); font-weight: 600; font-size: 14px; letter-spacing: .07em; text-transform: uppercase; color: var(--fg-2); }
+.ch-t span { font-size: 12px; color: var(--fg-3); }
+.zoombar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+
+/* corners */
+.corners { padding: 6px 0 4px; }
+.crow { display: grid; grid-template-columns: 54px minmax(0, 1fr) minmax(0, 1fr) minmax(110px, 1.6fr); align-items: center; gap: 8px; padding: 8px 14px; border-bottom: 1px solid var(--line-2); cursor: pointer; font-family: var(--mono); font-size: 13.5px; font-variant-numeric: tabular-nums; background: none; border-left: 0; border-right: 0; border-top: 0; width: 100%; text-align: left; color: inherit; }
+.crow:hover, .crow.on { background: var(--surface-2); }
+.crow.head { cursor: default; font-family: var(--display); font-weight: 600; font-size: 13px; letter-spacing: .08em; text-transform: uppercase; color: var(--fg-3); background: none; }
+.cn { font-family: var(--display); font-weight: 700; font-size: 17px; }
+.dv { display: grid; grid-template-columns: 1fr 1fr; align-items: center; gap: 0; position: relative; height: 18px; }
+.dv::before { content: ""; position: absolute; left: 50%; top: 0; bottom: 0; width: 1px; background: var(--line); }
+.dv .l { justify-self: end; height: 8px; border-radius: 3px 0 0 3px; background: var(--gain); }
+.dv .r { justify-self: start; height: 8px; border-radius: 0 3px 3px 0; background: var(--loss); }
+.dvt { font-size: 12.5px; text-align: right; }
+.insight { padding: 12px 14px; display: grid; gap: 6px; font-size: 14.5px; border-bottom: 1px solid var(--line); }
+.insight p { margin: 0; max-width: 70ch; }
+.insight b { font-weight: 600; }
+
+.drop { position: fixed; inset: 0; z-index: 20; background: color-mix(in srgb, var(--bg) 85%, transparent); display: grid; place-items: center; font-family: var(--display); font-size: 28px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; border: 3px dashed var(--fg-3); }
+.toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(16px + env(safe-area-inset-bottom, 0px)); z-index: 30; background: var(--ink); color: var(--ink-fg); padding: 10px 16px; border-radius: 8px; font-weight: 500; max-width: calc(100% - 32px); box-shadow: 0 6px 24px rgba(0,0,0,.18); }
+.confirm { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; font-size: 14px; }
+.foot { color: var(--fg-3); font-size: 13px; max-width: 75ch; display: grid; gap: 6px; padding: 4px 2px; }
+.foot p { margin: 0; }
+.drop[hidden], .toast[hidden] { display: none; }
+.empty { padding: 28px 16px; text-align: center; color: var(--fg-2); }
+@media (prefers-reduced-motion: no-preference) { .chip, .pick, .crow { transition: background-color .12s, color .12s; } }
+</style>
+
+</head>
+<body>
+<header class="bar"><div class="bar-in">
+  <div class="brand"><i aria-hidden="true"></i>Telemetria Kart</div>
+  <div class="sess">
+    <label for="sessionSel" class="hint" style="position:absolute;left:-9999px">Sessione</label>
+    <select id="sessionSel"></select>
+    <button class="btn" id="delBtn" title="Rimuovi la sessione dall'elenco" aria-label="Rimuovi sessione">✕</button>
+    <label class="btn primary" for="fileIn">Apri .xrk</label>
+    <input type="file" id="fileIn" multiple>
+  </div>
+</div></header>
+
+<main id="app">
+  <div id="confirmBox" hidden class="card" style="padding:12px 14px"></div>
+
+  <section class="lcd" id="lcd" aria-label="Riepilogo sessione">
+    <div class="lcd-meta" id="meta"></div>
+    <div class="lcd-main">
+      <div>
+        <div class="big-label">Miglior giro</div>
+        <div class="big" id="bestBig">–</div>
+      </div>
+      <div class="stats" id="stats"></div>
+    </div>
+  </section>
+
+  <section class="card">
+    <div class="card-h"><h2>Giri</h2><p class="hint">Scegli il giro <b style="color:var(--lap-a)">A</b> (riferimento) e il giro <b style="color:var(--lap-b)">B</b> da confrontare</p></div>
+    <div class="tbl-wrap"><table id="lapTbl"></table></div>
+  </section>
+
+  <div class="ana">
+    <section class="card map-card">
+      <div class="card-h"><h2>Tracciato</h2>
+        <div class="seg" role="group" aria-label="Colore del tracciato">
+          <button class="chip on" data-map="delta" id="mapDelta">Guadagno / perdita</button>
+          <button class="chip" data-map="speed" id="mapSpeed">Velocità</button>
+        </div>
+      </div>
+      <div class="map-wrap"><canvas id="map" aria-label="Mappa del tracciato con il giro B colorato"></canvas></div>
+      <div class="legend" id="mapLegend"></div>
+    </section>
+
+    <section class="card" id="chartCard">
+      <div class="readout" id="readout"></div>
+      <div class="card-h" style="padding-top:10px"><div class="zoombar" id="zoombar"></div><p class="hint">Trascina sui grafici o tocca la mappa</p></div>
+      <div class="charts" id="charts"></div>
+    </section>
+  </div>
+
+  <section class="card">
+    <div class="card-h"><h2>Curva per curva</h2><p class="hint">Giro B rispetto ad A · tocca una curva per ingrandirla</p></div>
+    <div class="insight" id="insight"></div>
+    <div class="corners" id="corners"></div>
+  </section>
+
+  <footer class="foot">
+    <p>I file si aprono e restano solo su questo dispositivo: nessun dato viene inviato. Per avere il file .xrk sull'iPhone, scarica la sessione con l'app RaceStudio e salvala in File, poi aprila qui con «Apri .xrk». Funziona anche con i file .xrz.</p>
+    <p>Giri e intertempi arrivano dal MyChron quando il file li contiene; altrimenti vengono ricavati dal GPS. Il delta è calcolato sulla distanza normalizzata del giro.</p>
+  </footer>
+</main>
+<div class="drop" id="drop" hidden>Rilascia il file .xrk</div>
+<div class="toast" id="toast" hidden role="status"></div>
+
+<script>
+// XRK/XRZ parser for AiM loggers (MyChron 5/5S/6, Solo 2...).
+// Format knowledge derived from libxrk (MIT, (c) 2024 Scott Smith / Christopher Dewan).
+const XRK = (() => {
+  const UNIT = {1:['%',2],3:['g',2],4:['deg',1],5:['deg/s',1],6:['',0],9:['Hz',0],11:['',0],12:['mm',0],
+    14:['bar',2],15:['rpm',0],16:['km/h',0],17:['°C',1],18:['ms',0],19:['Nm',0],20:['km/h',0],21:['mV',1],
+    22:['l',1],24:['l/s',0],27:['A',0],30:['lambda',2],31:['gear',0],33:['%',2],43:['kg',3]};
+  // decoder byte -> [reader, bytes]
+  const DEC = {0:'i32',1:'u16',3:'i32',4:'i16',6:'f32',11:'i16',12:'i32',13:'u8',15:'u16',20:'f16',
+    22:'i32',24:'i32',26:'i32',27:'i32',31:'i32',32:'i32',33:'i32',37:'i32',38:'i32',39:'i32'};
+  const SKIP = new Set(['Master Clk','StrtRec','Lap Time','Predictive Time','Prdt Best Diff','Total Odometer',
+    'Reset Odometer 1','Reset Odometer 2','Reset Odometer 3','Reset Odometer 4','iGPS','Backlight','WiFi','Luminosity']);
+
+  function f16(h) {
+    const s = (h & 0x8000) ? -1 : 1, e = (h >> 10) & 0x1f, f = h & 0x3ff;
+    if (e === 0) return s * Math.pow(2, -14) * (f / 1024);
+    if (e === 31) return f ? NaN : s * Infinity;
+    return s * Math.pow(2, e - 15) * (1 + f / 1024);
+  }
+  function readVal(dv, off, t) {
+    switch (t) {
+      case 'i32': return dv.getInt32(off, true);
+      case 'u16': return dv.getUint16(off, true);
+      case 'i16': return dv.getInt16(off, true);
+      case 'f32': return dv.getFloat32(off, true);
+      case 'u8':  return dv.getUint8(off);
+      case 'f16': return f16(dv.getUint16(off, true));
+    }
+  }
+  const cstr = (u8, a, b) => { let s = ''; for (let i = a; i < b && u8[i]; i++) s += String.fromCharCode(u8[i]); return s.trim(); };
+  const tokStr = (dv, o) => cstr(new Uint8Array(dv.buffer, dv.byteOffset + o, 4), 0, 4);
+
+  // Byte-growable buffer
+  class Buf {
+    constructor() { this.a = new Uint8Array(4096); this.n = 0; }
+    push(src, from, to) {
+      const len = to - from;
+      if (this.n + len > this.a.length) { let m = this.a.length * 2; while (m < this.n + len) m *= 2; const b = new Uint8Array(m); b.set(this.a.subarray(0, this.n)); this.a = b; }
+      this.a.set(src.subarray(from, to), this.n); this.n += len;
+    }
+    view() { return new DataView(this.a.buffer, 0, this.n); }
+  }
+
+  function parseChs(u8, o, len) {
+    const dv = new DataView(u8.buffer, u8.byteOffset + o, len);
+    const unitByte = u8[o + 12];
+    const [units, dec] = UNIT[unitByte & 127] || ['', 0];
+    return {
+      index: dv.getUint16(0, true), unitByte, dec: u8[o + 20],
+      shortName: cstr(u8, o + 24, o + 32), name: cstr(u8, o + 32, o + 56),
+      periodMs: Math.floor(dv.getUint32(64, true) / 1000), size: u8[o + 72],
+      units: (unitByte & 0x80 && units === 'mV') ? 'V' : units, decPts: dec,
+    };
+  }
+
+  // Parse a sequence of <h ...> header messages (used for CNF payloads)
+  function parseHeaders(u8, start, end, out) {
+    const dv = new DataView(u8.buffer, u8.byteOffset);
+    let pos = start;
+    while (pos + 12 <= end) {
+      if (u8[pos] !== 0x3c || u8[pos + 1] !== 0x68) { pos++; continue; }
+      const tok = tokStr(dv, pos + 2), hlen = dv.getInt32(pos + 6, true);
+      const p0 = pos + 12, p1 = p0 + hlen;
+      if (u8[pos + 11] !== 0x3e || hlen < 0 || p1 + 8 > end || u8[p1] !== 0x3c) { pos++; continue; }
+      out.push({ tok, a: p0, b: p1 });
+      pos = p1 + 8;
+    }
+    return out;
+  }
+
+  async function inflateIfNeeded(u8) {
+    if (u8.length > 2 && u8[0] === 0x78 && [0x01, 0x9c, 0xda].includes(u8[1])) {
+      const ds = new DecompressionStream('deflate');
+      const out = await new Response(new Blob([u8]).stream().pipeThrough(ds)).arrayBuffer();
+      return new Uint8Array(out);
+    }
+    return u8;
+  }
+
+  function parse(u8) {
+    const dv = new DataView(u8.buffer, u8.byteOffset, u8.byteLength);
+    const L = u8.length;
+    const channels = [];               // by index
+    const groups = [];                 // by index: {channels:[idx], size, buf, last}
+    const sAcc = [], cAcc = [], mAcc = [];
+    const gps = new Buf(), meta = {}, laps = [];
+    let trk = null;
+    const acc = () => ({ buf: new Buf(), tcs: [], last: -2147483648 });
+
+    let pos = 0, bad = 0;
+    while (pos < L - 10) {
+      const b0 = u8[pos], b1 = u8[pos + 1];
+      try {
+        if (b0 === 0x28 && (b1 === 0x47 || b1 === 0x53)) { // (G / (S
+          const tc = dv.getInt32(pos + 2, true), idx = dv.getUint16(pos + 6, true);
+          let size, a;
+          if (b1 === 0x47) { const g = groups[idx]; if (!g) throw 0; size = g.size + 9; a = g; }
+          else { const c = channels[idx]; if (!c) throw 0; size = c.size + 9; a = sAcc[idx] || (sAcc[idx] = acc()); }
+          if (pos + size > L || u8[pos + size - 1] !== 0x29) throw 0;
+          if (tc > a.last) { a.last = tc; a.buf.push(u8, pos + 2, pos + size - 1); }
+          pos += size; continue;
+        }
+        if (b0 === 0x28 && b1 === 0x4d) { // (M
+          const tc = dv.getInt32(pos + 2, true), idx = dv.getUint16(pos + 6, true), cnt = dv.getUint16(pos + 8, true);
+          const c = channels[idx]; if (!c || !c.periodMs) throw 0;
+          const end = pos + 10 + c.size * cnt;
+          if (end >= L || u8[end] !== 0x29) throw 0;
+          const a = mAcc[idx] || (mAcc[idx] = acc());
+          let skip = 0;
+          if (tc <= a.last) skip = Math.floor((a.last - tc) / c.periodMs) + 1;
+          if (skip < cnt) {
+            a.last = tc + (cnt - 1) * c.periodMs;
+            for (let k = skip; k < cnt; k++) a.tcs.push(tc + k * c.periodMs);
+            a.buf.push(u8, pos + 10 + skip * c.size, end);
+          }
+          pos = end + 1; continue;
+        }
+        if (b0 === 0x28 && b1 === 0x63) { // (c  V1 only
+          if (u8[pos + 5] !== 0x84 || u8[pos + 2] !== 0 || u8[pos + 6] !== 6) throw 0;
+          const ch = dv.getUint16(pos + 3, true); if ((ch & 7) !== 4) throw 0;
+          const idx = ch >> 3, c = channels[idx]; if (!c) throw 0;
+          const size = c.size + 12; if (pos + size > L || u8[pos + size - 1] !== 0x29) throw 0;
+          const tc = dv.getInt32(pos + 7, true), a = cAcc[idx] || (cAcc[idx] = acc());
+          if (tc > a.last) { a.last = tc; a.buf.push(u8, pos + 7, pos + size - 1); }
+          pos += size; continue;
+        }
+        if (b0 === 0x3c && b1 === 0x68) { // <h
+          const tok = tokStr(dv, pos + 2), hlen = dv.getInt32(pos + 6, true);
+          if (u8[pos + 11] !== 0x3e || hlen < 0 || pos + 12 + hlen + 8 > L) throw 0;
+          const p0 = pos + 12, p1 = p0 + hlen;
+          if (u8[p1] !== 0x3c || u8[p1 + 7] !== 0x3e) throw 0;
+          let sum = 0; for (let i = p0; i < p1; i++) sum += u8[i];
+          if ((sum & 0xffff) !== dv.getUint16(p1 + 5, true)) throw 0;
+          pos = p1 + 8;
+          if (tok === 'GPS' || tok === 'GPS1') { gps.push(u8, p0, p1); continue; }
+          if (tok === 'CNF') {
+            for (const a of [sAcc, cAcc, mAcc, groups]) for (const x of a) if (x) x.last = -2147483648;
+            const sub = parseHeaders(u8, p0, p1, []);
+            for (const m of sub) if (m.tok === 'CHS') {
+              const c = parseChs(u8, m.a, m.b - m.a);
+              if (!channels[c.index]) channels[c.index] = c;
+            }
+            for (const m of sub) if (m.tok === 'GRP') {
+              const gdv = new DataView(u8.buffer, u8.byteOffset + m.a, m.b - m.a);
+              const gi = gdv.getUint16(0, true), n = gdv.getUint16(2, true), chs = [];
+              for (let k = 0; k < n; k++) chs.push(gdv.getUint16(4 + 2 * k, true));
+              let off = 6;
+              for (const ci of chs) { if (channels[ci]) { channels[ci].group = gi; channels[ci].gOff = off; off += channels[ci].size; } }
+              groups[gi] = { channels: chs, size: off - 6, buf: new Buf(), last: -2147483648 };
+            }
+            continue;
+          }
+          if (tok === 'LAP' && hlen >= 20) {
+            laps.push({ seg: u8[p0 + 1], lap: dv.getUint16(p0 + 2, true), dur: dv.getUint32(p0 + 4, true), end: dv.getUint32(p0 + (hlen >= 32 ? 28 : 16), true) });
+            continue;
+          }
+          if (tok === 'TRK' && hlen >= 44) {
+            trk = { name: cstr(u8, p0, p0 + 32), lat: dv.getInt32(p0 + 36, true) / 1e7, lon: dv.getInt32(p0 + 40, true) / 1e7 };
+            continue;
+          }
+          const names = { RCR: 'driver', VEH: 'vehicle', CMP: 'series', VTY: 'session', TMD: 'date', TMT: 'time', NTE: 'comment', NDV: 'device' };
+          if (names[tok]) meta[names[tok]] = cstr(u8, p0, p1);
+          else if (tok === 'idn' && hlen >= 10) { meta.modelId = dv.getUint16(p0, true); meta.loggerId = dv.getUint32(p0 + 6, true); }
+          continue;
+        }
+        throw 0;
+      } catch (e) { pos++; bad++; }
+    }
+
+    // ---- build channel arrays
+    const out = {};
+    let tmin = Infinity;
+    const build = (c) => {
+      const t = DEC[c.dec]; if (!t || SKIP.has(c.name)) return null;
+      let tc = [], v = [];
+      if (c.group != null) {
+        const g = groups[c.group]; const stride = g.size + 6, gv = g.buf.view(), n = Math.floor(g.buf.n / stride);
+        for (let r = 0; r < n; r++) { tc.push(gv.getInt32(r * stride, true)); v.push(readVal(gv, r * stride + c.gOff, t)); }
+      } else if (sAcc[c.index] && sAcc[c.index].buf.n) {
+        const a = sAcc[c.index], stride = c.size + 6, av = a.buf.view(), n = Math.floor(a.buf.n / stride);
+        for (let r = 0; r < n; r++) { tc.push(av.getInt32(r * stride, true)); v.push(readVal(av, r * stride + 6, t)); }
+      } else if (cAcc[c.index] && cAcc[c.index].buf.n) {
+        const a = cAcc[c.index], stride = c.size + 4, av = a.buf.view(), n = Math.floor(a.buf.n / stride);
+        for (let r = 0; r < n; r++) { tc.push(av.getInt32(r * stride, true)); v.push(readVal(av, r * stride + 4, t)); }
+      } else if (mAcc[c.index] && mAcc[c.index].tcs.length) {
+        const a = mAcc[c.index], av = a.buf.view();
+        tc = a.tcs; for (let r = 0; r < tc.length; r++) v.push(readVal(av, r * c.size, t));
+      } else return null;
+      if (c.dec === 15) v = v.map(x => ({ 78: 0, 49: 1, 50: 2, 51: 3, 52: 4, 53: 5, 54: 6 }[x] ?? x));
+      if (c.units === 'V') v = v.map(x => x / 1000);
+      let ok = 0, lo = Infinity, hi = -Infinity;
+      for (const x of v) if (isFinite(x)) { ok++; if (x < lo) lo = x; if (x > hi) hi = x; }
+      if (!ok || lo === hi) return null;           // empty or constant channel: useless
+      if (tc.length) tmin = Math.min(tmin, tc[0]);
+      return { name: c.name, short: c.shortName, units: c.units, decPts: c.decPts, unitByte: c.unitByte, t: tc, v };
+    };
+    for (const c of channels) if (c) { const r = build(c); if (r) out[r.name] = r; }
+
+    // ---- GPS: 56-byte records, int32 timecode + u-blox NAV-SOL
+    const G = gps.view(), nG = Math.floor(gps.n / 56);
+    const g = { t: new Float64Array(nG), lat: new Float64Array(nG), lon: new Float64Array(nG), alt: new Float64Array(nG), speed: new Float64Array(nG), heading: new Float64Array(nG), sats: new Uint8Array(nG), fix: new Uint8Array(nG) };
+    let prev = null;
+    for (let i = 0; i < nG; i++) {
+      const o = i * 56;
+      let tc = G.getInt32(o, true);
+      if (prev !== null && tc < prev) { // unwrap broken upper 16 bits
+        const d = ((((tc - prev) & 0xffff) ^ 0x8000) - 0x8000); tc = prev + d;
+      }
+      prev = tc; g.t[i] = tc;
+      const X = G.getInt32(o + 16, true) / 100, Y = G.getInt32(o + 20, true) / 100, Z = G.getInt32(o + 24, true) / 100;
+      const [la, lo, al] = ecef2lla(X, Y, Z); g.lat[i] = la; g.lon[i] = lo; g.alt[i] = al;
+      const vx = G.getInt32(o + 32, true) / 100, vy = G.getInt32(o + 36, true) / 100, vz = G.getInt32(o + 40, true) / 100;
+      g.speed[i] = Math.hypot(vx, vy, vz);
+      const phi = la * Math.PI / 180, lam = lo * Math.PI / 180;
+      const ve = -Math.sin(lam) * vx + Math.cos(lam) * vy;
+      const vn = -Math.sin(phi) * Math.cos(lam) * vx - Math.sin(phi) * Math.sin(lam) * vy + Math.cos(phi) * vz;
+      g.heading[i] = Math.atan2(ve, vn) * 180 / Math.PI;
+      g.fix[i] = G.getUint8(o + 14); g.sats[i] = G.getUint8(o + 51);
+    }
+    if (nG) tmin = Math.min(tmin, g.t[0]);
+    for (const l of laps) tmin = Math.min(tmin, l.end - l.dur);
+    if (!isFinite(tmin)) tmin = 0;
+    for (let i = 0; i < nG; i++) g.t[i] -= tmin;
+    for (const k in out) out[k].t = Float64Array.from(out[k].t, x => x - tmin), out[k].v = Float64Array.from(out[k].v);
+
+    // keep only valid fixes
+    const keep = []; for (let i = 0; i < nG; i++) if (g.fix[i] >= 2 && (g.lat[i] || g.lon[i])) keep.push(i);
+    const gf = {}; for (const k in g) gf[k] = g[k].constructor.from(keep, i => g[k][i]);
+
+    // official laps (LAP messages, segment 0)
+    // official laps (LAP messages): seg 0 = lap end, seg 1..n = cumulative split times
+    const offLaps = [], splits = {};
+    for (const l of laps) {
+      if (l.seg) { (splits[l.lap] = splits[l.lap] || [])[l.seg - 1] = l.dur; continue; }
+      if (offLaps.length && offLaps[offLaps.length - 1].lap === l.lap) continue;
+      offLaps.push({ lap: l.lap, start: l.end - l.dur - tmin, end: l.end - tmin, dur: l.dur });
+    }
+    for (const l of offLaps) { const sp = splits[l.lap - 1]; if (sp && sp.every(x => x > 0 && x < l.dur)) l.splits = sp.slice(); }
+    return { meta, channels: out, gps: gf, laps: offLaps, trk: trk && (trk.lat || trk.lon) ? trk : (trk && trk.name ? { name: trk.name } : null), badBytes: bad };
+  }
+
+  function ecef2lla(x, y, z) {
+    const a = 6378137, e2 = 6.69437999014e-3, b = a * Math.sqrt(1 - e2), ep2 = (a * a - b * b) / (b * b);
+    const p = Math.hypot(x, y), th = Math.atan2(z * a, p * b);
+    const lon = Math.atan2(y, x);
+    const lat = Math.atan2(z + ep2 * b * Math.sin(th) ** 3, p - e2 * a * Math.cos(th) ** 3);
+    const N = a / Math.sqrt(1 - e2 * Math.sin(lat) ** 2);
+    const alt = p / Math.cos(lat) - N;
+    return [lat * 180 / Math.PI, lon * 180 / Math.PI, alt];
+  }
+
+  async function load(arrayBuffer) {
+    const u8 = await inflateIfNeeded(new Uint8Array(arrayBuffer));
+    return parse(u8);
+  }
+  return { load, parse };
+})();
+
+
+</script>
+<script>
+(() => {
+'use strict';
+const $ = (id) => document.getElementById(id);
+const css = (n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
+
+// ---------- formatting
+const fmtLap = (ms) => { if (ms == null || !isFinite(ms)) return '–'; const s = ms / 1000; if (s < 60) return s.toFixed(3); const m = Math.floor(s / 60); return m + ':' + (s - m * 60).toFixed(3).padStart(6, '0'); };
+const fmtSec = (ms) => ms == null || !isFinite(ms) ? '–' : (ms / 1000).toFixed(3);
+const fmtD = (ms, dp = 3) => { if (ms == null || !isFinite(ms)) return '–'; const s = ms / 1000; return (s > 0 ? '+' : s < 0 ? '−' : '±') + Math.abs(s).toFixed(dp); };
+
+// ---------- numeric helpers
+function bsearch(arr, x) { let lo = 0, hi = arr.length - 1; if (x <= arr[0]) return 0; if (x >= arr[hi]) return hi - 1; while (hi - lo > 1) { const m = (lo + hi) >> 1; if (arr[m] <= x) lo = m; else hi = m; } return lo; }
+function interp(xs, ys, x) { const n = xs.length; if (!n) return NaN; if (n === 1) return ys[0]; const i = bsearch(xs, x); const x0 = xs[i], x1 = xs[i + 1]; if (x1 === x0) return ys[i]; const f = clamp((x - x0) / (x1 - x0), 0, 1); return ys[i] + (ys[i + 1] - ys[i]) * f; }
+function smooth(a, w) { const n = a.length, o = new Float64Array(n); let s = 0, c = 0; const h = Math.floor(w / 2); for (let i = 0; i < n; i++) { let acc = 0, k = 0; for (let j = Math.max(0, i - h); j <= Math.min(n - 1, i + h); j++) if (isFinite(a[j])) { acc += a[j]; k++; } o[i] = k ? acc / k : NaN; } return o; }
+
+// ---------- session analysis
+function analyze(parsed, name) {
+  const g = parsed.gps; const n = g.t.length;
+  if (n < 20) throw new Error('Il file non contiene abbastanza dati GPS per l\'analisi.');
+  let lat0 = 0, lon0 = 0; for (let i = 0; i < n; i++) { lat0 += g.lat[i]; lon0 += g.lon[i]; } lat0 /= n; lon0 /= n;
+  const kx = Math.cos(lat0 * Math.PI / 180) * 111320, ky = 110574;
+  const T = g.t, X = new Float64Array(n), Y = new Float64Array(n), V = new Float64Array(n), D = new Float64Array(n);
+  for (let i = 0; i < n; i++) { X[i] = (g.lon[i] - lon0) * kx; Y[i] = (g.lat[i] - lat0) * ky; V[i] = g.speed[i] * 3.6; }
+  for (let i = 1; i < n; i++) D[i] = D[i - 1] + (g.speed[i] + g.speed[i - 1]) / 2 * (T[i] - T[i - 1]) / 1000;
+  // longitudinal g from GPS speed, lateral g from accelerometer (fallback GPS)
+  const lonG = new Float64Array(n), latGgps = new Float64Array(n);
+  for (let i = 0; i < n; i++) {
+    const a = Math.max(0, i - 1), b = Math.min(n - 1, i + 1), dt = (T[b] - T[a]) / 1000 || 1;
+    lonG[i] = (g.speed[b] - g.speed[a]) / dt / 9.81;
+    let dh = g.heading[b] - g.heading[a]; if (dh > 180) dh -= 360; if (dh < -180) dh += 360;
+    latGgps[i] = g.speed[i] * dh / dt * Math.PI / 180 / 9.81;
+  }
+  const ch = parsed.channels;
+  const rpm = ch.RPM || ch['Engine RPM'] || null;
+  let latG = null;
+  const accY = ch.AccelerometerY || ch.LateralAcc || null;
+  if (accY) {
+    // orient so that right-hand turns are positive (match GPS-derived sign)
+    let s = 0; for (let i = 0; i < n; i += 3) s += interp(accY.t, accY.v, T[i]) * latGgps[i];
+    const sign = s < 0 ? -1 : 1; latG = { t: accY.t, v: smooth(Float64Array.from(accY.v, x => x * sign), 5) };
+  } else latG = { t: T, v: smooth(latGgps, 3) };
+  const lonGs = { t: T, v: smooth(lonG, 3) };
+
+  // laps
+  let laps = parsed.laps.map(l => ({ num: l.lap, start: Math.max(l.start, T[0]), end: Math.min(l.end, T[n - 1]), dur: l.dur, splits: l.splits || null, src: 'mychron' }));
+  if (!laps.length) laps = detectLaps(T, X, Y, V, parsed.trk, lat0, lon0, kx, ky);
+  laps = laps.filter(l => l.end - l.start > 3000);
+  if (!laps.length) throw new Error('Non trovo giri completi in questa sessione.');
+  const durs = laps.map(l => l.dur).slice().sort((a, b) => a - b), med = durs[Math.floor(durs.length / 2)];
+  laps.forEach((l, i) => {
+    l.type = 'full';
+    if (i === 0 && (l.start <= T[0] + 500 || l.dur > med * 1.12)) l.type = 'out';
+    if (i === laps.length - 1 && i > 0 && (l.end >= T[n - 1] - 2000 || l.dur < med * 0.8)) l.type = 'in';
+    if (l.type === 'full' && (l.dur > med * 1.3 || l.dur < med * 0.75)) l.type = 'slow';
+  });
+  // per-lap arrays at GPS rate (with interpolated endpoints)
+  for (const l of laps) {
+    const i0 = bsearch(T, l.start) + 1, i1 = bsearch(T, l.end);
+    const t = [l.start], d = [interp(T, D, l.start)], x = [interp(T, X, l.start)], y = [interp(T, Y, l.start)], v = [interp(T, V, l.start)];
+    for (let i = i0; i <= i1; i++) if (T[i] > l.start && T[i] < l.end) { t.push(T[i]); d.push(D[i]); x.push(X[i]); y.push(Y[i]); v.push(V[i]); }
+    t.push(l.end); d.push(interp(T, D, l.end)); x.push(interp(T, X, l.end)); y.push(interp(T, Y, l.end)); v.push(interp(T, V, l.end));
+    const d0 = d[0];
+    l.t = Float64Array.from(t, z => z - l.start); l.tabs = Float64Array.from(t); l.d = Float64Array.from(d, z => z - d0);
+    l.x = Float64Array.from(x); l.y = Float64Array.from(y); l.v = Float64Array.from(v);
+    l.len = l.d[l.d.length - 1];
+    l.vmax = Math.max(...l.v); l.vmin = Math.min(...l.v.subarray(Math.floor(l.v.length * .05), Math.ceil(l.v.length * .95)));
+    if (rpm) { let mx = 0; const j0 = bsearch(rpm.t, l.start), j1 = bsearch(rpm.t, l.end); for (let j = j0; j <= j1; j++) if (rpm.v[j] > mx) mx = rpm.v[j]; l.rpmMax = mx; }
+  }
+  const full = laps.filter(l => l.type === 'full');
+  const valid = full.length ? full : laps;
+  const best = valid.reduce((a, b) => (b.dur < a.dur ? b : a));
+  best.isBest = true;
+
+  // sectors: MyChron splits when present, otherwise thirds of the best lap by distance
+  let splitPts = null;
+  const withSplits = laps.find(l => l.splits && l.type === 'full') || laps.find(l => l.splits);
+  if (withSplits) {
+    const ref = best.splits ? best : withSplits;
+    splitPts = ref.splits.map(s => ({ x: interp(ref.t, ref.x, s), y: interp(ref.t, ref.y, s) }));
+  } else {
+    splitPts = [1 / 3, 2 / 3].map(f => ({ x: interp(best.d, best.x, f * best.len), y: interp(best.d, best.y, f * best.len) }));
+  }
+  for (const l of laps) {
+    let cum = l.splits && l.splits.length === splitPts.length ? l.splits.slice() : null;
+    if (!cum && l.type !== 'out') cum = splitPts.map(p => passTime(l, p));
+    if (cum && cum.every((c, i) => isFinite(c) && c > 0 && c < l.dur && (i === 0 || c > cum[i - 1]))) {
+      l.sectors = cum.map((c, i) => c - (i ? cum[i - 1] : 0)).concat([l.dur - cum[cum.length - 1]]);
+    } else l.sectors = null;
+  }
+  const nSec = splitPts.length + 1, bestSec = [];
+  for (let k = 0; k < nSec; k++) { let m = Infinity; for (const l of valid) if (l.sectors && l.sectors[k] < m) m = l.sectors[k]; bestSec.push(isFinite(m) ? m : null); }
+  const ideal = bestSec.every(x => x != null) ? bestSec.reduce((a, b) => a + b, 0) : null;
+  let sd = null; if (full.length > 2) { const m = full.reduce((a, l) => a + l.dur, 0) / full.length; sd = Math.sqrt(full.reduce((a, l) => a + (l.dur - m) ** 2, 0) / (full.length - 1)); }
+  const sf = { x: best.x[0], y: best.y[0], hx: best.x[Math.min(3, best.x.length - 1)] - best.x[0], hy: best.y[Math.min(3, best.y.length - 1)] - best.y[0] };
+  return { name, meta: parsed.meta, trk: parsed.trk, T, X, Y, V, D, rpm, latG, lonG: lonGs, laps, best, bestSec, nSec, ideal, sd, splitPts, sf, lapSrc: laps[0].src,
+    vmax: Math.max(...valid.map(l => l.vmax)), rpmMax: rpm ? Math.max(...valid.map(l => l.rpmMax || 0)) : null };
+}
+
+// time (ms from lap start) at which the lap passes nearest to point p
+function passTime(l, p) {
+  let bi = -1, bd = Infinity;
+  for (let i = 0; i < l.x.length - 1; i++) {
+    const ax = l.x[i], ay = l.y[i], bx = l.x[i + 1], by = l.y[i + 1], dx = bx - ax, dy = by - ay, L2 = dx * dx + dy * dy || 1;
+    const f = clamp(((p.x - ax) * dx + (p.y - ay) * dy) / L2, 0, 1), qx = ax + f * dx - p.x, qy = ay + f * dy - p.y, dd = qx * qx + qy * qy;
+    if (dd < bd) { bd = dd; bi = i + f; }
+  }
+  if (bd > 30 * 30) return NaN;
+  const i = Math.floor(bi), f = bi - i; return l.t[i] + (l.t[Math.min(i + 1, l.t.length - 1)] - l.t[i]) * f;
+}
+
+// GPS lap detection when the file has no lap markers: gate across the track at the finish line
+function detectLaps(T, X, Y, V, trk, lat0, lon0, kx, ky) {
+  const n = T.length; let si;
+  if (trk && trk.lat) { const px = (trk.lon - lon0) * kx, py = (trk.lat - lat0) * ky; let bd = Infinity; for (let i = 0; i < n; i++) { const d = (X[i] - px) ** 2 + (Y[i] - py) ** 2; if (d < bd && V[i] > 20) { bd = d; si = i; } } }
+  if (si == null) { const vs = smooth(V, 9); si = 0; for (let i = 0; i < n; i++) if (vs[i] > vs[si]) si = i; }
+  const a = Math.max(0, si - 2), b = Math.min(n - 1, si + 2);
+  let hx = X[b] - X[a], hy = Y[b] - Y[a]; const hl = Math.hypot(hx, hy) || 1; hx /= hl; hy /= hl;
+  const px = X[si], py = Y[si], cross = [];
+  for (let i = 0; i < n - 1; i++) {
+    const s0 = (X[i] - px) * hx + (Y[i] - py) * hy, s1 = (X[i + 1] - px) * hx + (Y[i + 1] - py) * hy;
+    if (s0 < 0 && s1 >= 0) {
+      const f = s0 / (s0 - s1), lx = X[i] + (X[i + 1] - X[i]) * f - px, ly = Y[i] + (Y[i + 1] - Y[i]) * f - py;
+      if (Math.abs(-lx * hy + ly * hx) < 20) { const t = T[i] + (T[i + 1] - T[i]) * f; if (!cross.length || t - cross[cross.length - 1] > 10000) cross.push(t); }
+    }
+  }
+  const laps = []; const pts = [T[0], ...cross, T[n - 1]];
+  for (let k = 0; k < pts.length - 1; k++) laps.push({ num: k + 1, start: pts[k], end: pts[k + 1], dur: pts[k + 1] - pts[k], splits: null, src: 'gps' });
+  return laps;
+}
+
+// ---------- A vs B comparison on normalized distance
+const NG = 800;
+function compare(S, A, B) {
+  const f = new Float64Array(NG), dA = new Float64Array(NG), tA = new Float64Array(NG), tB = new Float64Array(NG), vA = new Float64Array(NG), vB = new Float64Array(NG),
+    delta = new Float64Array(NG), xA = new Float64Array(NG), yA = new Float64Array(NG), xB = new Float64Array(NG), yB = new Float64Array(NG),
+    rA = new Float64Array(NG), rB = new Float64Array(NG), gA = new Float64Array(NG), gB = new Float64Array(NG), lA = new Float64Array(NG), lB = new Float64Array(NG);
+  for (let i = 0; i < NG; i++) {
+    const fr = i / (NG - 1); f[i] = fr; const da = fr * A.len, db = fr * B.len; dA[i] = da;
+    tA[i] = interp(A.d, A.t, da); tB[i] = interp(B.d, B.t, db);
+    vA[i] = interp(A.d, A.v, da); vB[i] = interp(B.d, B.v, db);
+    xA[i] = interp(A.d, A.x, da); yA[i] = interp(A.d, A.y, da); xB[i] = interp(B.d, B.x, db); yB[i] = interp(B.d, B.y, db);
+    delta[i] = tB[i] - tA[i];
+    const ta = A.start + tA[i], tb = B.start + tB[i];
+    if (S.rpm) { rA[i] = interp(S.rpm.t, S.rpm.v, ta); rB[i] = interp(S.rpm.t, S.rpm.v, tb); }
+    gA[i] = interp(S.latG.t, S.latG.v, ta); gB[i] = interp(S.latG.t, S.latG.v, tb);
+    lA[i] = interp(S.lonG.t, S.lonG.v, ta); lB[i] = interp(S.lonG.t, S.lonG.v, tb);
+  }
+  // corners: speed minima on A
+  const vs = smooth(vA, 9), corners = [], win = Math.max(4, Math.round(35 / (A.len / NG)));
+  for (let i = 2; i < NG - 2; i++) {
+    let isMin = true; for (let j = Math.max(0, i - win); j <= Math.min(NG - 1, i + win); j++) if (vs[j] < vs[i]) { isMin = false; break; }
+    if (!isMin) continue;
+    let lmax = 0, rmax = 0; for (let j = Math.max(0, i - win * 3); j < i; j++) lmax = Math.max(lmax, vs[j]); for (let j = i + 1; j <= Math.min(NG - 1, i + win * 3); j++) rmax = Math.max(rmax, vs[j]);
+    if (Math.min(lmax, rmax) - vs[i] >= 4 && (!corners.length || i - corners[corners.length - 1].i > win)) corners.push({ i });
+  }
+  // segment boundaries at the speed peaks between corners
+  for (let k = 0; k < corners.length; k++) {
+    const c = corners[k];
+    const lo = k ? corners[k - 1].i : 0, hi = k < corners.length - 1 ? corners[k + 1].i : NG - 1;
+    let s = lo, e = hi;
+    if (k) { s = lo; for (let j = lo; j <= c.i; j++) if (vs[j] > vs[s]) s = j; } else s = 0;
+    if (k < corners.length - 1) { e = c.i; for (let j = c.i; j <= hi; j++) if (vs[j] > vs[e]) e = j; } else e = NG - 1;
+    c.s = s; c.e = e; c.n = k + 1;
+    c.vA = vA[c.i]; let mb = Infinity, mbi = c.i; for (let j = s; j <= e; j++) if (vB[j] < mb) { mb = vB[j]; mbi = j; } c.vB = mb;
+    c.dt = delta[e] - delta[s];
+    // brake point: where speed starts dropping before the minimum (first point after the last peak)
+    c.bA = s; c.bB = s;
+  }
+  return { f, dA, tA, tB, vA, vB, delta, xA, yA, xB, yB, rA, rB, gA, gB, lA, lB, corners, A, B };
+}
+
+// ---------- storage (IndexedDB, best-effort)
+const DB = {
+  db: null,
+  async open() { try { this.db = await new Promise((res, rej) => { const r = indexedDB.open('telemetria-kart', 1); r.onupgradeneeded = () => r.result.createObjectStore('files', { keyPath: 'id', autoIncrement: true }); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); }); } catch (e) { this.db = null; } },
+  tx(mode) { return this.db.transaction('files', mode).objectStore('files'); },
+  async list() { if (!this.db) return []; try { return await new Promise((res, rej) => { const out = []; const c = this.tx('readonly').openCursor(); c.onsuccess = () => { const cur = c.result; if (cur) { const { bytes, ...rest } = cur.value; out.push(rest); cur.continue(); } else res(out); }; c.onerror = () => rej(c.error); }); } catch (e) { return []; } },
+  async get(id) { if (!this.db) return null; try { return await new Promise((res, rej) => { const r = this.tx('readonly').get(id); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); }); } catch (e) { return null; } },
+  async add(rec) { if (!this.db) return null; try { return await new Promise((res, rej) => { const r = this.tx('readwrite').add(rec); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); }); } catch (e) { return null; } },
+  async del(id) { if (!this.db) return; try { await new Promise((res, rej) => { const r = this.tx('readwrite').delete(id); r.onsuccess = res; r.onerror = () => rej(r.error); }); } catch (e) {} },
+};
+const LS = { get(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } }, set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} } };
+
+// ---------- app state
+const st = { S: null, A: null, B: null, C: null, cursor: 0.12, range: [0, 1], mapMode: LS.get('mapMode', 'delta'), zoomCorner: null, sessions: [], current: 'sample', mem: {} };
+
+function toast(msg, ms = 2600) { const t = $('toast'); t.textContent = msg; t.hidden = false; clearTimeout(toast._t); toast._t = setTimeout(() => t.hidden = true, ms); }
+
+async function loadBytes(buf, name) {
+  const parsed = await XRK.load(buf);
+  return analyze(parsed, name);
+}
+
+async function sampleBytes() { const r = await fetch('sample.xrz'); if (!r.ok) throw new Error('File di prova non disponibile.'); return r.arrayBuffer(); }
+
+async function refreshSessionList() {
+  st.sessions = (await DB.list()).sort((a, b) => b.addedAt - a.addedAt);
+  const sel = $('sessionSel'); sel.innerHTML = '';
+  for (const s of st.sessions) {
+    const o = document.createElement('option'); o.value = String(s.id);
+    o.textContent = `${s.name}${s.best ? ' · ' + fmtLap(s.best) : ''}`; sel.appendChild(o);
+  }
+  for (const k in st.mem) { const s = st.mem[k]; const o = document.createElement('option'); o.value = k; o.textContent = `${s.name} · ${fmtLap(s.best)}`; sel.appendChild(o); }
+  const o = document.createElement('option'); o.value = 'sample'; o.textContent = 'File di prova · CloseTrackDB_Split'; sel.appendChild(o);
+  sel.value = String(st.current); $('delBtn').hidden = st.current === 'sample';
+}
+
+async function openSession(id) {
+  try {
+    let S;
+    if (id === 'sample') S = await loadBytes(await sampleBytes(), 'File di prova');
+    else if (st.mem[id]) S = await loadBytes(st.mem[id].bytes.slice(0), st.mem[id].name);
+    else { const rec = await DB.get(Number(id)); if (!rec) throw new Error('Sessione non trovata.'); S = await loadBytes(rec.bytes.slice(0), rec.name); }
+    st.current = id; LS.set('lastSession', id); setSession(S);
+  } catch (e) { console.error(e); toast(e.message || 'Impossibile aprire la sessione.'); }
+  refreshSessionList();
+}
+
+async function addFiles(files) {
+  let lastId = null;
+  for (const file of files) {
+    try {
+      const buf = await file.arrayBuffer();
+      const S = await loadBytes(buf.slice(0), file.name.replace(/\.(xrk|xrz)$/i, ''));
+      const rec = { name: S.name, addedAt: Date.now(), size: file.size, best: S.best.dur, date: S.meta.date || '', bytes: buf };
+      let id = await DB.add(rec);
+      if (id == null) { id = 'mem' + Date.now(); st.mem[id] = rec; }
+      lastId = id; st.current = id; setSession(S);
+      toast(`Aperto ${file.name}: ${S.laps.length} giri, migliore ${fmtLap(S.best.dur)}`);
+    } catch (e) { console.error(e); toast(`${file.name}: ${e.message || 'formato non riconosciuto'}`, 4000); }
+  }
+  if (lastId != null) LS.set('lastSession', lastId);
+  refreshSessionList();
+}
+
+function setSession(S) {
+  st.S = S;
+  const full = S.laps.filter(l => l.type === 'full').sort((a, b) => a.dur - b.dur);
+  st.A = S.best;
+  st.B = full.find(l => l !== S.best) || S.laps.find(l => l !== S.best) || S.best;
+  st.range = [0, 1]; st.zoomCorner = null;
+  renderSummary(); renderLaps(); recompute();
+}
+
+function recompute() { st.C = compare(st.S, st.A, st.B); if (st.zoomCorner && !st.C.corners[st.zoomCorner - 1]) { st.zoomCorner = null; st.range = [0, 1]; } renderAll(); }
+function renderAll() { renderLapPicks(); renderZoombar(); drawMap(); drawCharts(); renderReadout(); renderCorners(); renderLegend(); }
+
+// ---------- summary (LCD)
+function renderSummary() {
+  const S = st.S, m = S.meta, full = S.laps.filter(l => l.type === 'full');
+  const items = [];
+  if (S.trk && S.trk.name) items.push(['Pista', S.trk.name]);
+  if (m.date) items.push(['Data', m.date + (m.time ? ' ' + m.time.slice(0, 5) : '')]);
+  if (m.session) items.push(['Sessione', m.session]);
+  if (m.loggerId) items.push(['Logger', String(m.loggerId)]);
+  items.push(['Giri', S.lapSrc === 'gps' ? 'dal GPS' : 'dal MyChron']);
+  $('meta').innerHTML = items.map(([k, v]) => `<span>${k} <b>${esc(v)}</b></span>`).join('');
+  const sec = (ms) => (ms / 1000).toFixed(3);
+  $('bestBig').innerHTML = `${fmtLap(S.best.dur)}<small>GIRO ${S.best.num}</small>`;
+  const stats = [
+    ['Giro ideale', S.ideal ? fmtLap(S.ideal) : '–', S.ideal ? `<small>${fmtD(S.ideal - S.best.dur)}</small>` : ''],
+    ['Costanza', S.sd != null ? '±' + sec(S.sd) : '–', '<small>s</small>'],
+    ['Velocità max', Math.round(S.vmax), '<small>km/h</small>'],
+    [S.rpmMax ? 'Giri motore max' : 'Giri validi', S.rpmMax ? Math.round(S.rpmMax).toLocaleString('it-IT') : full.length, S.rpmMax ? '<small>rpm</small>' : ''],
+  ];
+  $('stats').innerHTML = stats.map(([k, v, u]) => `<div class="stat"><div class="k">${k}</div><div class="v">${v}${u}</div></div>`).join('');
+}
+const esc = (s) => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+// ---------- lap table
+function renderLaps() {
+  const S = st.S, nS = S.nSec;
+  const maxD = Math.max(500, ...S.laps.filter(l => l.type === 'full').map(l => l.dur - S.best.dur));
+  let h = `<thead><tr><th>Giro</th><th style="text-align:center">A · B</th><th>Tempo</th><th>Δ migliore</th>${Array.from({ length: nS }, (_, k) => `<th>S${k + 1}</th>`).join('')}<th>V max</th><th>V min</th></tr></thead><tbody>`;
+  for (const l of S.laps) {
+    const tag = l.type === 'out' ? '<span class="tag">uscita</span>' : l.type === 'in' ? '<span class="tag">rientro</span>' : l.type === 'slow' ? '<span class="tag">lento</span>' : l.isBest ? '<span class="tag best">best</span>' : '';
+    const d = l.dur - S.best.dur, muted = l.type !== 'full';
+    const bw = muted || l.isBest ? 0 : Math.round(clamp(d / maxD, 0, 1) * 46) + 2;
+    const secs = Array.from({ length: nS }, (_, k) => { const v = l.sectors ? l.sectors[k] : null; const isB = v != null && S.bestSec[k] === v && l.type === 'full'; return `<td class="${isB ? 'sec-best' : ''}">${v != null ? fmtSec(v) : '–'}</td>`; }).join('');
+    h += `<tr class="${muted ? 'muted' : ''} ${l.isBest ? 'is-best' : ''}" data-lap="${l.num}"><td class="lapn">${l.num}${tag}</td><td style="text-align:center"><span class="picks"><button class="pick a" data-pick="A" data-lap="${l.num}" aria-label="Usa il giro ${l.num} come riferimento A">A</button><button class="pick b" data-pick="B" data-lap="${l.num}" aria-label="Confronta il giro ${l.num} come B">B</button></span></td><td class="time">${fmtLap(l.dur)}</td>
+      <td>${l.isBest || muted ? (l.isBest ? '' : '–') : `<span class="dbar"><span class="b" style="width:${bw}px"></span>${fmtD(d)}</span>`}</td>${secs}
+      <td>${Math.round(l.vmax)}</td><td>${Math.round(l.vmin)}</td></tr>`;
+  }
+  h += '</tbody>';
+  $('lapTbl').innerHTML = h;
+}
+function renderLapPicks() {
+  document.querySelectorAll('.pick').forEach(b => { const n = Number(b.dataset.lap); b.classList.toggle('on', (b.dataset.pick === 'A' ? st.A : st.B).num === n); b.setAttribute('aria-pressed', b.classList.contains('on')); });
+}
+$('lapTbl').addEventListener('click', (e) => {
+  const b = e.target.closest('.pick'); if (!b) return;
+  const lap = st.S.laps.find(l => l.num === Number(b.dataset.lap)); if (!lap) return;
+  if (b.dataset.pick === 'A') { if (lap === st.B) st.B = st.A; st.A = lap; } else { if (lap === st.A) st.A = st.B; st.B = lap; }
+  recompute();
+});
+
+// ---------- canvas helpers
+function setupCanvas(cv, h) {
+  const dpr = Math.min(3, window.devicePixelRatio || 1), w = cv.clientWidth || cv.parentElement.clientWidth;
+  if (cv.width !== Math.round(w * dpr) || cv.height !== Math.round(h * dpr)) { cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr); cv.style.height = h + 'px'; }
+  const ctx = cv.getContext('2d'); ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, w, h); return { ctx, w, h };
+}
+function hex2rgb(h) { h = h.replace('#', ''); if (h.length === 3) h = h.split('').map(c => c + c).join(''); return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)]; }
+function mix(a, b, t) { const A = hex2rgb(a), B = hex2rgb(b); return `rgb(${A.map((x, i) => Math.round(x + (B[i] - x) * t)).join(',')})`; }
+function ramp(t) { const r = ['--ramp-0', '--ramp-1', '--ramp-2', '--ramp-3', '--ramp-4'].map(css); t = clamp(t, 0, 1) * 4; const i = Math.min(3, Math.floor(t)); return mix(r[i], r[i + 1], t - i); }
+
+// ---------- map
+let mapGeom = null;
+function drawMap() {
+  const S = st.S, C = st.C, cv = $('map');
+  const w = cv.parentElement.clientWidth - 20;
+  let minx = Infinity, maxx = -Infinity, miny = Infinity, maxy = -Infinity;
+  for (const l of S.laps) if (l.type !== 'out' && l.type !== 'in') for (let i = 0; i < l.x.length; i++) { minx = Math.min(minx, l.x[i]); maxx = Math.max(maxx, l.x[i]); miny = Math.min(miny, l.y[i]); maxy = Math.max(maxy, l.y[i]); }
+  if (!isFinite(minx)) for (let i = 0; i < S.X.length; i++) { minx = Math.min(minx, S.X[i]); maxx = Math.max(maxx, S.X[i]); miny = Math.min(miny, S.Y[i]); maxy = Math.max(maxy, S.Y[i]); }
+  const pad = 26, aspect = (maxy - miny) / (maxx - minx || 1);
+  const h = clamp(Math.round((w - 2 * pad) * aspect + 2 * pad), 220, Math.max(260, Math.min(560, window.innerHeight * .62)));
+  const { ctx } = setupCanvas(cv, h);
+  const sc = Math.min((w - 2 * pad) / (maxx - minx || 1), (h - 2 * pad) / (maxy - miny || 1));
+  const ox = (w - (maxx - minx) * sc) / 2, oy = (h - (maxy - miny) * sc) / 2;
+  const P = (x, y) => [ox + (x - minx) * sc, h - (oy + (y - miny) * sc)];
+  mapGeom = { P, sc, w, h };
+  // base: track ribbon from all laps
+  ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  ctx.strokeStyle = css('--line'); ctx.lineWidth = 11; ctx.beginPath();
+  for (let i = 0; i < NG; i++) { const [px, py] = P(C.xA[i], C.yA[i]); i ? ctx.lineTo(px, py) : ctx.moveTo(px, py); } ctx.stroke();
+  // zoom window highlight
+  const [r0, r1] = st.range; const i0 = Math.floor(r0 * (NG - 1)), i1 = Math.ceil(r1 * (NG - 1));
+  // colored lap B
+  ctx.lineWidth = 4.5;
+  const dd = new Float64Array(NG); for (let i = 1; i < NG; i++) dd[i] = C.delta[i] - C.delta[i - 1];
+  const dds = smooth(dd, 7); let dmax = 0; for (const v of dds) dmax = Math.max(dmax, Math.abs(v)); dmax = dmax || 1;
+  const vlo = Math.min(...C.vB), vhi = Math.max(...C.vB);
+  const gain = css('--gain'), loss = css('--loss'), neu = css('--neutral');
+  for (let i = 1; i < NG; i++) {
+    const out = i < i0 || i > i1;
+    let col;
+    if (st.mapMode === 'speed') col = ramp((C.vB[i] - vlo) / (vhi - vlo || 1));
+    else { const t = clamp(dds[i] / (dmax * 0.7), -1, 1); col = t < 0 ? mix(neu, gain, -t) : mix(neu, loss, t); }
+    ctx.globalAlpha = out ? .28 : 1; ctx.strokeStyle = col; ctx.beginPath();
+    const [ax, ay] = P(C.xB[i - 1], C.yB[i - 1]), [bx, by] = P(C.xB[i], C.yB[i]); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
+  // start/finish and split marks
+  const tick = (x, y, x2, y2, label, strong) => {
+    const [px, py] = P(x, y), [qx, qy] = P(x2, y2); let nx = -(qy - py), ny = qx - px; const L = Math.hypot(nx, ny) || 1; nx /= L; ny /= L;
+    ctx.strokeStyle = css('--fg'); ctx.lineWidth = strong ? 3 : 2; ctx.beginPath(); ctx.moveTo(px - nx * 10, py - ny * 10); ctx.lineTo(px + nx * 10, py + ny * 10); ctx.stroke();
+    ctx.fillStyle = css('--fg-2'); ctx.font = `600 11px ${css('--display')}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(label, px + nx * 20, py + ny * 20);
+  };
+  const A = st.A; tick(A.x[0], A.y[0], A.x[Math.min(2, A.x.length - 1)], A.y[Math.min(2, A.y.length - 1)], 'S/F', true);
+  S.splitPts.forEach((p, k) => { let bi = 0, bd = Infinity; for (let i = 0; i < NG; i++) { const d = (C.xA[i] - p.x) ** 2 + (C.yA[i] - p.y) ** 2; if (d < bd) { bd = d; bi = i; } } const j = Math.min(NG - 1, bi + 2); tick(C.xA[bi], C.yA[bi], C.xA[j], C.yA[j], 'S' + (k + 2), false); });
+  // corner numbers
+  let cx = 0, cy = 0; for (let i = 0; i < NG; i++) { cx += C.xA[i]; cy += C.yA[i]; } cx /= NG; cy /= NG; const [ccx, ccy] = P(cx, cy);
+  ctx.font = `700 12px ${css('--display')}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  for (const c of C.corners) {
+    const [px, py] = P(C.xA[c.i], C.yA[c.i]); let nx = px - ccx, ny = py - ccy; const L = Math.hypot(nx, ny) || 1; nx /= L; ny /= L;
+    const lx = px + nx * 19, ly = py + ny * 19, on = st.zoomCorner === c.n;
+    ctx.fillStyle = on ? css('--ink') : css('--surface'); ctx.strokeStyle = css('--fg-3'); ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.arc(lx, ly, 9, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = on ? css('--ink-fg') : css('--fg'); ctx.fillText(String(c.n), lx, ly + .5);
+  }
+  // cursor dots
+  const k = Math.round(st.cursor * (NG - 1));
+  const dot = (x, y, col) => { const [px, py] = P(x, y); ctx.fillStyle = col; ctx.strokeStyle = css('--surface'); ctx.lineWidth = 2.5; ctx.beginPath(); ctx.arc(px, py, 6.5, 0, Math.PI * 2); ctx.fill(); ctx.stroke(); };
+  dot(C.xA[k], C.yA[k], css('--lap-a')); dot(C.xB[k], C.yB[k], css('--lap-b'));
+}
+function renderLegend() {
+  const C = st.C, lg = $('mapLegend');
+  const ab = `<span><i class="sw" style="background:var(--lap-a);height:8px;width:8px;border-radius:50%"></i>Giro ${st.A.num} (A)</span><span><i class="sw" style="background:var(--lap-b);height:8px;width:8px;border-radius:50%"></i>Giro ${st.B.num} (B)</span>`;
+  if (st.mapMode === 'speed') lg.innerHTML = `<span>Velocità giro B ${Math.round(Math.min(...C.vB))}<i class="grad" style="background:linear-gradient(90deg,var(--ramp-0),var(--ramp-2),var(--ramp-4))"></i>${Math.round(Math.max(...C.vB))} km/h</span>` + ab;
+  else lg.innerHTML = `<span>B guadagna<i class="grad" style="background:linear-gradient(90deg,var(--gain),var(--neutral),var(--loss))"></i>B perde</span>` + ab;
+  $('mapDelta').classList.toggle('on', st.mapMode === 'delta'); $('mapSpeed').classList.toggle('on', st.mapMode === 'speed');
+}
+document.querySelectorAll('[data-map]').forEach(b => b.addEventListener('click', () => { st.mapMode = b.dataset.map; LS.set('mapMode', st.mapMode); drawMap(); renderLegend(); }));
+$('map').addEventListener('pointerdown', (e) => {
+  if (!mapGeom) return; const r = $('map').getBoundingClientRect(), mx = e.clientX - r.left, my = e.clientY - r.top, C = st.C;
+  // corner label hit first
+  let bi = 0, bd = Infinity; for (let i = 0; i < NG; i++) { const [px, py] = mapGeom.P(C.xA[i], C.yA[i]); const d = (px - mx) ** 2 + (py - my) ** 2; if (d < bd) { bd = d; bi = i; } }
+  if (bd < 40 * 40) { st.cursor = bi / (NG - 1); if (st.cursor < st.range[0] || st.cursor > st.range[1]) { st.range = [0, 1]; st.zoomCorner = null; renderZoombar(); } drawMap(); drawCharts(); renderReadout(); }
+});
+
+// ---------- charts
+const CHARTS = [
+  { id: 'speed', title: 'Velocità', unit: 'km/h', h: 150, a: 'vA', b: 'vB' },
+  { id: 'delta', title: 'Delta B − A', unit: 's', h: 110, delta: true },
+  { id: 'rpm', title: 'Giri motore', unit: 'rpm', h: 120, a: 'rA', b: 'rB', need: 'rpm' },
+  { id: 'lat', title: 'G laterale', unit: 'g, + destra', h: 100, a: 'gA', b: 'gB' },
+  { id: 'lon', title: 'G longitudinale', unit: 'g, − frenata', h: 100, a: 'lA', b: 'lB', last: true },
+];
+function buildCharts() {
+  $('charts').innerHTML = CHARTS.filter(c => !c.need || st.S[c.need]).map(c => `<div class="ch"><div class="ch-t"><b>${c.title}</b><span>${c.unit}</span></div><canvas id="cv-${c.id}" aria-label="${c.title}"></canvas></div>`).join('');
+  CHARTS.forEach(c => { const cv = $('cv-' + c.id); if (!cv) return; attachScrub(cv); });
+}
+function niceStep(range, n) { const raw = range / n, p = Math.pow(10, Math.floor(Math.log10(raw))), m = raw / p; return (m < 1.5 ? 1 : m < 3 ? 2 : m < 7 ? 5 : 10) * p; }
+const PADL = 44, PADR = 10;
+function drawCharts() {
+  const C = st.C; if (!C) return;
+  const vis = CHARTS.filter(c => $('cv-' + c.id));
+  const [r0, r1] = st.range, i0 = Math.max(0, Math.floor(r0 * (NG - 1))), i1 = Math.min(NG - 1, Math.ceil(r1 * (NG - 1)));
+  const k = Math.round(st.cursor * (NG - 1));
+  vis.forEach((c, ci) => {
+    const cv = $('cv-' + c.id), last = ci === vis.length - 1, H = c.h + (last ? 18 : 0);
+    const { ctx, w } = setupCanvas(cv, H); const h = c.h;
+    const X = (i) => PADL + (C.f[i] - r0) / (r1 - r0) * (w - PADL - PADR);
+    const series = c.delta ? [C.delta] : [C[c.a], C[c.b]];
+    let lo = Infinity, hi = -Infinity; for (const s of series) for (let i = i0; i <= i1; i++) if (isFinite(s[i])) { lo = Math.min(lo, s[i]); hi = Math.max(hi, s[i]); }
+    if (c.delta) { const m = Math.max(Math.abs(lo), Math.abs(hi), 50); lo = -m; hi = m; }
+    if (!isFinite(lo)) { lo = 0; hi = 1; } if (hi - lo < 1e-6) { hi += 1; lo -= 1; }
+    const padY = (hi - lo) * .08; lo -= padY; hi += padY;
+    const Y = (v) => 6 + (1 - (v - lo) / (hi - lo)) * (h - 12);
+    // grid
+    const step = niceStep(hi - lo, 3); ctx.font = `11px ${css('--mono')}`; ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+    for (let v = Math.ceil(lo / step) * step; v <= hi; v += step) {
+      const y = Y(v); ctx.strokeStyle = css('--line-2'); ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(PADL, y); ctx.lineTo(w - PADR, y); ctx.stroke();
+      ctx.fillStyle = css('--fg-3'); let lab = c.delta ? (v / 1000).toFixed(step < 100 ? 2 : 1) : c.id === 'rpm' ? (v / 1000).toFixed(v % 1000 ? 1 : 0) + 'k' : Math.abs(step) < 1 ? v.toFixed(1) : String(Math.round(v));
+      if (c.delta && v > 0) lab = '+' + lab; ctx.fillText(lab, PADL - 6, y);
+    }
+    // sector boundaries (vertical, faint)
+    if (c.delta) {
+      const y0 = Y(0);
+      ctx.save(); ctx.beginPath(); ctx.rect(PADL, 0, w - PADL - PADR, h); ctx.clip();
+      for (const [sign, col] of [[1, css('--loss')], [-1, css('--gain')]]) {
+        ctx.beginPath(); ctx.moveTo(X(i0), y0);
+        for (let i = i0; i <= i1; i++) { const v = sign > 0 ? Math.max(0, C.delta[i]) : Math.min(0, C.delta[i]); ctx.lineTo(X(i), Y(v)); }
+        ctx.lineTo(X(i1), y0); ctx.closePath(); ctx.fillStyle = col; ctx.globalAlpha = .22; ctx.fill(); ctx.globalAlpha = 1;
+      }
+      ctx.strokeStyle = css('--fg-3'); ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(PADL, y0); ctx.lineTo(w - PADR, y0); ctx.stroke();
+      ctx.strokeStyle = css('--fg'); ctx.lineWidth = 2; ctx.beginPath(); for (let i = i0; i <= i1; i++) { const x = X(i), y = Y(C.delta[i]); i === i0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y); } ctx.stroke();
+      ctx.restore();
+    } else {
+      ctx.save(); ctx.beginPath(); ctx.rect(PADL, 0, w - PADL - PADR, h); ctx.clip();
+      [[C[c.a], css('--lap-a')], [C[c.b], css('--lap-b')]].forEach(([s, col]) => { ctx.strokeStyle = col; ctx.lineWidth = 2; ctx.lineJoin = 'round'; ctx.beginPath(); let started = false; for (let i = i0; i <= i1; i++) { if (!isFinite(s[i])) continue; const x = X(i), y = Y(s[i]); started ? ctx.lineTo(x, y) : (ctx.moveTo(x, y), started = true); } ctx.stroke(); });
+      ctx.restore();
+    }
+    // corner markers on speed chart
+    if (c.id === 'speed') { ctx.font = `600 11px ${css('--display')}`; ctx.textAlign = 'center'; ctx.textBaseline = 'top'; ctx.fillStyle = css('--fg-3'); for (const cn of C.corners) if (cn.i >= i0 && cn.i <= i1) ctx.fillText('C' + cn.n, X(cn.i), Y(C.vA[cn.i]) + 6 > h - 14 ? h - 14 : Y(C.vA[cn.i]) + 6); }
+    // x axis on last chart
+    if (last) {
+      const d0 = r0 * st.A.len, d1 = r1 * st.A.len, xs = niceStep(d1 - d0, Math.max(3, Math.floor((w - PADL) / 80)));
+      ctx.fillStyle = css('--fg-3'); ctx.font = `11px ${css('--mono')}`; ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+      for (let d = Math.ceil(d0 / xs) * xs; d <= d1; d += xs) { const x = PADL + (d - d0) / (d1 - d0) * (w - PADL - PADR); ctx.fillText(Math.round(d) + (d + xs > d1 ? ' m' : ''), x, h + 4); }
+    }
+    // cursor
+    if (k >= i0 && k <= i1) {
+      const x = X(k); ctx.strokeStyle = css('--fg-2'); ctx.lineWidth = 1; ctx.setLineDash([3, 3]); ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke(); ctx.setLineDash([]);
+      const pts = c.delta ? [[C.delta[k], css('--fg')]] : [[C[c.a][k], css('--lap-a')], [C[c.b][k], css('--lap-b')]];
+      for (const [v, col] of pts) if (isFinite(v)) { ctx.fillStyle = col; ctx.strokeStyle = css('--surface'); ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(x, Y(v), 4.5, 0, Math.PI * 2); ctx.fill(); ctx.stroke(); }
+    }
+  });
+}
+function attachScrub(cv) {
+  let active = false, sx = 0, sy = 0, decided = false;
+  const set = (e) => { const r = cv.getBoundingClientRect(), w = r.width; const fr = clamp((e.clientX - r.left - PADL) / (w - PADL - PADR), 0, 1); st.cursor = st.range[0] + fr * (st.range[1] - st.range[0]); drawCharts(); drawMap(); renderReadout(); };
+  cv.addEventListener('pointerdown', (e) => { active = true; sx = e.clientX; sy = e.clientY; decided = e.pointerType !== 'touch'; if (decided) { cv.setPointerCapture(e.pointerId); set(e); } });
+  cv.addEventListener('pointermove', (e) => {
+    if (e.pointerType === 'mouse' && !active) { set(e); return; }
+    if (!active) return;
+    if (!decided) { if (Math.abs(e.clientX - sx) > 6 && Math.abs(e.clientX - sx) > Math.abs(e.clientY - sy)) { decided = true; } else if (Math.abs(e.clientY - sy) > 6) { active = false; return; } else return; }
+    set(e);
+  });
+  const end = (e) => { if (active && !decided && e.type === 'pointerup') set(e); active = false; };
+  cv.addEventListener('pointerup', end); cv.addEventListener('pointercancel', () => active = false);
+}
+
+function renderReadout() {
+  const C = st.C, k = Math.round(st.cursor * (NG - 1));
+  const v2 = (a, b, dp = 0, u = '') => `<span class="a">${isFinite(a) ? a.toFixed(dp) : '–'}</span><span class="sep">/</span>${isFinite(b) ? b.toFixed(dp) : '–'}${u}`;
+  const items = [
+    ['Distanza', `${Math.round(C.dA[k])} m`],
+    ['<i class="mark" style="background:var(--lap-a)"></i>A / <i class="mark" style="background:var(--lap-b)"></i>B km/h', v2(C.vA[k], C.vB[k])],
+    ['Delta', `<span style="color:${C.delta[k] > 0 ? 'var(--loss)' : 'var(--gain)'}">${fmtD(C.delta[k], 2)}</span>`],
+  ];
+  if (st.S.rpm) items.push(['RPM A / B', v2(C.rA[k], C.rB[k])]);
+  items.push(['G lat A / B', v2(C.gA[k], C.gB[k], 2)]);
+  $('readout').innerHTML = items.map(([k2, v]) => `<div class="ro"><div class="k">${k2}</div><div class="v">${v}</div></div>`).join('');
+}
+
+function renderZoombar() {
+  const z = $('zoombar');
+  if (st.zoomCorner) z.innerHTML = `<button class="btn" id="zoomOut">← Giro intero</button><b style="font-family:var(--display);font-size:16px;letter-spacing:.05em;text-transform:uppercase">Curva ${st.zoomCorner}</b>`;
+  else z.innerHTML = `<b style="font-family:var(--display);font-size:16px;letter-spacing:.05em;text-transform:uppercase">Giro ${st.A.num} <span style="color:var(--lap-a)">A</span> · Giro ${st.B.num} <span style="color:var(--lap-b)">B</span></b>`;
+  const zo = $('zoomOut'); if (zo) zo.onclick = () => { st.zoomCorner = null; st.range = [0, 1]; renderZoombar(); drawCharts(); drawMap(); renderCorners(); };
+}
+
+// ---------- corners
+function renderCorners() {
+  const C = st.C, cs = C.corners;
+  const total = C.delta[NG - 1];
+  if (!cs.length) { $('corners').innerHTML = '<div class="empty">Nessuna curva riconosciuta in questo giro.</div>'; $('insight').innerHTML = ''; return; }
+  const maxAbs = Math.max(30, ...cs.map(c => Math.abs(c.dt)));
+  let h = `<div class="crow head"><span>Curva</span><span>V min A</span><span>V min B</span><span style="text-align:right">B rispetto ad A</span></div>`;
+  for (const c of cs) {
+    const wpx = Math.round(Math.abs(c.dt) / maxAbs * 100);
+    h += `<button class="crow ${st.zoomCorner === c.n ? 'on' : ''}" data-corner="${c.n}"><span class="cn">${c.n}</span><span>${Math.round(c.vA)}</span><span>${Math.round(c.vB)} <span style="color:var(--fg-3);font-size:12px">${c.vB - c.vA >= 0 ? '+' : '−'}${Math.abs(Math.round(c.vB - c.vA))}</span></span>
+      <span style="display:grid;grid-template-columns:minmax(0,1fr) 62px;gap:8px;align-items:center"><span class="dv">${c.dt < 0 ? `<span class="l" style="width:${wpx}%"></span><span></span>` : `<span></span><span class="r" style="width:${wpx}%"></span>`}</span><span class="dvt" style="color:${c.dt > 0 ? 'var(--loss)' : 'var(--gain)'}">${fmtD(c.dt)}</span></span></button>`;
+  }
+  $('corners').innerHTML = h;
+  // plain-language summary
+  const worst = cs.slice().sort((a, b) => b.dt - a.dt).filter(c => c.dt > 15).slice(0, 3);
+  const bestG = cs.slice().sort((a, b) => a.dt - b.dt).filter(c => c.dt < -15).slice(0, 2);
+  let p = `<p>Il giro <b>${st.B.num}</b> è <b style="color:${total > 0 ? 'var(--loss)' : 'var(--gain)'}">${fmtD(total)} s</b> rispetto al giro <b>${st.A.num}</b>.</p>`;
+  if (worst.length) p += `<p>Il tempo si perde soprattutto ${worst.map(c => `in <b>curva ${c.n}</b> (${fmtD(c.dt)} s${c.vB < c.vA - 1 ? `, ${Math.round(c.vA - c.vB)} km/h in meno a centro curva` : c.vB > c.vA + 1 ? `, entra più veloce ma esce peggio` : ''})`).join(', ')}.</p>`;
+  if (bestG.length) p += `<p>Si guadagna ${bestG.map(c => `in <b>curva ${c.n}</b> (${fmtD(c.dt)} s)`).join(' e ')}.</p>`;
+  if (st.A === st.B) p = '<p>Scegli due giri diversi per vedere dove cambia il tempo.</p>';
+  $('insight').innerHTML = p;
+}
+$('corners').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-corner]'); if (!b) return; const n = Number(b.dataset.corner), c = st.C.corners[n - 1];
+  if (st.zoomCorner === n) { st.zoomCorner = null; st.range = [0, 1]; }
+  else { st.zoomCorner = n; const pad = 0.01; st.range = [Math.max(0, c.s / (NG - 1) - pad), Math.min(1, c.e / (NG - 1) + pad)]; st.cursor = c.i / (NG - 1); }
+  renderZoombar(); drawCharts(); drawMap(); renderReadout(); renderCorners();
+  $('chartCard').scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start' });
+});
+
+// ---------- files, drag & drop, delete
+$('fileIn').addEventListener('change', (e) => { const f = [...e.target.files]; e.target.value = ''; if (f.length) addFiles(f); });
+$('sessionSel').addEventListener('change', (e) => openSession(e.target.value));
+$('delBtn').addEventListener('click', () => {
+  if (st.current === 'sample') return;
+  const box = $('confirmBox'); const name = $('sessionSel').selectedOptions[0]?.textContent || '';
+  box.innerHTML = `<div class="confirm"><span>Rimuovere <b>${esc(name)}</b> dall'elenco di questo dispositivo?</span><button class="btn primary" id="yesDel">Rimuovi</button><button class="btn" id="noDel">Annulla</button></div>`; box.hidden = false;
+  $('noDel').onclick = () => box.hidden = true;
+  $('yesDel').onclick = async () => { box.hidden = true; const id = st.current; if (st.mem[id]) delete st.mem[id]; else await DB.del(Number(id)); toast('Sessione rimossa'); await openSession('sample'); };
+});
+let dragN = 0;
+addEventListener('dragenter', (e) => { if ([...(e.dataTransfer?.types || [])].includes('Files')) { dragN++; $('drop').hidden = false; e.preventDefault(); } });
+addEventListener('dragover', (e) => e.preventDefault());
+addEventListener('dragleave', () => { if (--dragN <= 0) { dragN = 0; $('drop').hidden = true; } });
+addEventListener('drop', (e) => { e.preventDefault(); dragN = 0; $('drop').hidden = true; const f = [...(e.dataTransfer?.files || [])]; if (f.length) addFiles(f); });
+
+// ---------- resize & theme
+let rz; addEventListener('resize', () => { clearTimeout(rz); rz = setTimeout(() => { if (st.C) { drawMap(); drawCharts(); } }, 120); });
+const redraw = () => { if (st.C) { drawMap(); drawCharts(); } };
+matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change', redraw);
+new MutationObserver(redraw).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+
+// ---------- boot
+(async () => {
+  await DB.open();
+  const last = LS.get('lastSession', 'sample');
+  const list = await DB.list();
+  const id = last !== 'sample' && list.some(s => String(s.id) === String(last)) ? String(last) : 'sample';
+  st.current = id;
+  const origSet = setSession;
+  await openSession(id);
+  if (!st.S) await openSession('sample');
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(redraw);
+})();
+// build charts whenever a session is set
+const _setSession = setSession;
+setSession = function (S) { st.S = S; buildCharts(); _setSession(S); };
+})();
+</script>
+
+<script>
+if ('serviceWorker' in navigator) addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
+</script>
+</body>
+</html>
