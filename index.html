@@ -78,6 +78,17 @@ h2 { font-family: var(--display); font-weight: 600; font-size: 17px; letter-spac
 .lcd { background: var(--lcd); color: var(--lcd-fg); border-radius: var(--r); padding: 14px 16px 16px; border: 1px solid var(--lcd-line); display: grid; gap: 12px; }
 .lcd-meta { display: flex; flex-wrap: wrap; gap: 4px 14px; font-family: var(--mono); font-size: 12px; color: var(--lcd-dim); text-transform: uppercase; letter-spacing: .04em; }
 .lcd-meta b { color: var(--lcd-fg); font-weight: 500; }
+.lcd-track { display: flex; align-items: baseline; gap: 6px 14px; flex-wrap: wrap; border-bottom: 1px solid var(--lcd-line); padding-bottom: 10px; }
+.trk-name { font-family: var(--display); font-weight: 700; font-size: 26px; line-height: 1.05; letter-spacing: .02em; text-transform: uppercase; min-width: 0; overflow-wrap: anywhere; }
+.trk-name.unknown { color: var(--lcd-dim); }
+.trk-rec { font-family: var(--mono); font-size: 12.5px; color: var(--lcd-dim); }
+.trk-rec b { color: var(--lcd-fg); font-weight: 500; }
+.lcd-btn { border: 1px solid var(--lcd-dim); background: transparent; color: var(--lcd-fg); border-radius: 6px; padding: 3px 10px; font-family: var(--body); font-size: 13px; font-weight: 600; cursor: pointer; }
+.lcd-btn:focus-visible { outline: 2px solid var(--lap-a); outline-offset: 2px; }
+.trk-form { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; width: 100%; }
+.trk-form input { flex: 1 1 200px; min-width: 0; height: 38px; border-radius: 8px; border: 1px solid var(--lcd-dim); background: var(--surface); color: var(--fg); padding: 0 10px; font-size: 16px; }
+.trk-form .btn { height: 38px; }
+.trk-form p { margin: 0; width: 100%; font-size: 13px; color: var(--lcd-dim); }
 .lcd-main { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 2fr); gap: 16px; align-items: end; }
 .big-label { font-family: var(--display); font-size: 14px; letter-spacing: .1em; text-transform: uppercase; color: var(--lcd-dim); font-weight: 600; }
 .big { font-family: var(--display); font-weight: 700; font-size: clamp(52px, 13vw, 92px); line-height: .9; letter-spacing: -.01em; font-variant-numeric: tabular-nums; }
@@ -181,6 +192,7 @@ canvas { display: block; width: 100%; touch-action: pan-y; }
   <div id="confirmBox" hidden class="card" style="padding:12px 14px"></div>
 
   <section class="lcd" id="lcd" aria-label="Riepilogo sessione">
+    <div class="lcd-track" id="trackRow"></div>
     <div class="lcd-meta" id="meta"></div>
     <div class="lcd-main">
       <div>
@@ -585,7 +597,7 @@ function analyze(parsed, name) {
   const ideal = bestSec.every(x => x != null) ? bestSec.reduce((a, b) => a + b, 0) : null;
   let sd = null; if (full.length > 2) { const m = full.reduce((a, l) => a + l.dur, 0) / full.length; sd = Math.sqrt(full.reduce((a, l) => a + (l.dur - m) ** 2, 0) / (full.length - 1)); }
   const sf = { x: best.x[0], y: best.y[0], hx: best.x[Math.min(3, best.x.length - 1)] - best.x[0], hy: best.y[Math.min(3, best.y.length - 1)] - best.y[0] };
-  return { name, meta: parsed.meta, trk: parsed.trk, T, X, Y, V, D, rpm, latG, lonG: lonGs, laps, best, bestSec, nSec, ideal, sd, splitPts, sf, lapSrc: laps[0].src,
+  return { name, lat0, lon0, meta: parsed.meta, trk: parsed.trk, T, X, Y, V, D, rpm, latG, lonG: lonGs, laps, best, bestSec, nSec, ideal, sd, splitPts, sf, lapSrc: laps[0].src,
     vmax: Math.max(...valid.map(l => l.vmax)), rpmMax: rpm ? Math.max(...valid.map(l => l.rpmMax || 0)) : null };
 }
 
@@ -670,6 +682,7 @@ const DB = {
   async list() { if (!this.db) return []; try { return await new Promise((res, rej) => { const out = []; const c = this.tx('readonly').openCursor(); c.onsuccess = () => { const cur = c.result; if (cur) { const { bytes, ...rest } = cur.value; out.push(rest); cur.continue(); } else res(out); }; c.onerror = () => rej(c.error); }); } catch (e) { return []; } },
   async get(id) { if (!this.db) return null; try { return await new Promise((res, rej) => { const r = this.tx('readonly').get(id); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); }); } catch (e) { return null; } },
   async add(rec) { if (!this.db) return null; try { return await new Promise((res, rej) => { const r = this.tx('readwrite').add(rec); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); }); } catch (e) { return null; } },
+  async put(rec) { if (!this.db) return; try { await new Promise((res, rej) => { const r = this.tx('readwrite').put(rec); r.onsuccess = res; r.onerror = () => rej(r.error); }); } catch (e) {} },
   async del(id) { if (!this.db) return; try { await new Promise((res, rej) => { const r = this.tx('readwrite').delete(id); r.onsuccess = res; r.onerror = () => rej(r.error); }); } catch (e) {} },
 };
 const LS = { get(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } }, set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} } };
@@ -679,9 +692,31 @@ const st = { S: null, A: null, B: null, C: null, cursor: 0.12, range: [0, 1], ma
 
 function toast(msg, ms = 2600) { const t = $('toast'); t.textContent = msg; t.hidden = false; clearTimeout(toast._t); toast._t = setTimeout(() => t.hidden = true, ms); }
 
+// ---------- tracks: saved by the user, recognised by GPS position + lap length
+const Tracks = {
+  all() { const l = LS.get('tracks', []); return Array.isArray(l) ? l : []; },
+  byId(id) { return this.all().find(t => t.id === id) || null; },
+  dist(la1, lo1, la2, lo2) { const k = Math.PI / 180, x = (lo2 - lo1) * k * Math.cos((la1 + la2) / 2 * k), y = (la2 - la1) * k; return Math.hypot(x, y) * 6371000; },
+  match(lat, lon, len) {
+    let best = null, score = Infinity;
+    for (const t of this.all()) {
+      const d = this.dist(lat, lon, t.lat, t.lon), lr = t.len && len ? Math.abs(len - t.len) / t.len : 0;
+      if (d < 1500 && lr < 0.12) { const sc = d / 1500 + lr * 4; if (sc < score) { score = sc; best = t; } }
+    }
+    return best;
+  },
+  upsert(t) { const l = this.all(), i = l.findIndex(x => x.id === t.id); if (i >= 0) l[i] = t; else l.push(t); LS.set('tracks', l); return t; },
+  create(name, S) { return this.upsert({ id: 't' + Date.now().toString(36), name, lat: S.lat0, lon: S.lon0, len: Math.round(S.best.len) }); },
+};
+function resolveTrack(S) {
+  S.track = Tracks.match(S.lat0, S.lon0, S.best.len);
+  if (!S.track && S.trk && S.trk.name) S.track = Tracks.create(S.trk.name, S);
+  return S;
+}
+
 async function loadBytes(buf, name) {
   const parsed = await XRK.load(buf);
-  return analyze(parsed, name);
+  return resolveTrack(analyze(parsed, name));
 }
 
 async function sampleBytes() { const r = await fetch('sample.xrz'); if (!r.ok) throw new Error('File di prova non disponibile.'); return r.arrayBuffer(); }
@@ -689,13 +724,28 @@ async function sampleBytes() { const r = await fetch('sample.xrz'); if (!r.ok) t
 async function refreshSessionList() {
   st.sessions = (await DB.list()).sort((a, b) => b.addedAt - a.addedAt);
   const sel = $('sessionSel'); sel.innerHTML = '';
-  for (const s of st.sessions) {
-    const o = document.createElement('option'); o.value = String(s.id);
-    o.textContent = `${s.name}${s.best ? ' · ' + fmtLap(s.best) : ''}`; sel.appendChild(o);
+  const all = st.sessions.map(s => ({ id: String(s.id), s })).concat(Object.keys(st.mem).map(k => ({ id: k, s: st.mem[k] })));
+  const groups = new Map();
+  for (const it of all) { const t = it.s.track ? Tracks.byId(it.s.track) : null; const g = t ? t.name : 'Pista non assegnata'; if (!groups.has(g)) groups.set(g, []); groups.get(g).push(it); }
+  const names = [...groups.keys()].sort((a, b) => (a === 'Pista non assegnata') - (b === 'Pista non assegnata') || a.localeCompare(b, 'it'));
+  for (const g of names) {
+    const og = document.createElement('optgroup'); og.label = g;
+    for (const { id, s } of groups.get(g)) { const o = document.createElement('option'); o.value = id; o.textContent = `${s.date ? s.date + ' · ' : ''}${s.name}${s.best ? ' · ' + fmtLap(s.best) : ''}`; og.appendChild(o); }
+    sel.appendChild(og);
   }
-  for (const k in st.mem) { const s = st.mem[k]; const o = document.createElement('option'); o.value = k; o.textContent = `${s.name} · ${fmtLap(s.best)}`; sel.appendChild(o); }
-  const o = document.createElement('option'); o.value = 'sample'; o.textContent = 'File di prova · CloseTrackDB_Split'; sel.appendChild(o);
+  const og = document.createElement('optgroup'); og.label = 'Esempio';
+  const o = document.createElement('option'); o.value = 'sample'; o.textContent = 'File di prova · CloseTrackDB_Split'; og.appendChild(o); sel.appendChild(og);
   sel.value = String(st.current); $('delBtn').hidden = st.current === 'sample';
+  if (st.S) renderTrackRow();
+}
+
+// keep the stored session record in sync with its track (older records, renamed tracks)
+async function syncRecord(id, S) {
+  const tid = S.track ? S.track.id : null;
+  if (id === 'sample') return;
+  if (st.mem[id]) { Object.assign(st.mem[id], { track: tid, lat: S.lat0, lon: S.lon0, best: S.best.dur }); return; }
+  const rec = await DB.get(Number(id)); if (!rec) return;
+  if (rec.track !== tid || rec.lat == null) { Object.assign(rec, { track: tid, lat: S.lat0, lon: S.lon0, best: S.best.dur, date: S.meta.date || rec.date || '' }); await DB.put(rec); }
 }
 
 async function openSession(id) {
@@ -704,7 +754,7 @@ async function openSession(id) {
     if (id === 'sample') S = await loadBytes(await sampleBytes(), 'File di prova');
     else if (st.mem[id]) S = await loadBytes(st.mem[id].bytes.slice(0), st.mem[id].name);
     else { const rec = await DB.get(Number(id)); if (!rec) throw new Error('Sessione non trovata.'); S = await loadBytes(rec.bytes.slice(0), rec.name); }
-    st.current = id; LS.set('lastSession', id); setSession(S);
+    st.current = id; LS.set('lastSession', id); setSession(S); await syncRecord(id, S);
   } catch (e) { console.error(e); toast(e.message || 'Impossibile aprire la sessione.'); }
   refreshSessionList();
 }
@@ -715,11 +765,11 @@ async function addFiles(files) {
     try {
       const buf = await file.arrayBuffer();
       const S = await loadBytes(buf.slice(0), file.name.replace(/\.(xrk|xrz)$/i, ''));
-      const rec = { name: S.name, addedAt: Date.now(), size: file.size, best: S.best.dur, date: S.meta.date || '', bytes: buf };
+      const rec = { name: S.name, addedAt: Date.now(), size: file.size, best: S.best.dur, date: S.meta.date || '', track: S.track ? S.track.id : null, lat: S.lat0, lon: S.lon0, bytes: buf };
       let id = await DB.add(rec);
       if (id == null) { id = 'mem' + Date.now(); st.mem[id] = rec; }
       lastId = id; st.current = id; setSession(S);
-      toast(`Aperto ${file.name}: ${S.laps.length} giri, migliore ${fmtLap(S.best.dur)}`);
+      toast(`Aperto ${file.name}${S.track ? ' · ' + S.track.name : ''}: migliore ${fmtLap(S.best.dur)}`);
     } catch (e) { console.error(e); toast(`${file.name}: ${e.message || 'formato non riconosciuto'}`, 4000); }
   }
   if (lastId != null) LS.set('lastSession', lastId);
@@ -738,11 +788,46 @@ function setSession(S) {
 function recompute() { st.C = compare(st.S, st.A, st.B); if (st.zoomCorner && !st.C.corners[st.zoomCorner - 1]) { st.zoomCorner = null; st.range = [0, 1]; } renderAll(); }
 function renderAll() { renderLapPicks(); renderZoombar(); drawMap(); drawCharts(); renderReadout(); renderCorners(); renderLegend(); }
 
+// ---------- track row (LCD)
+let trkEditing = false;
+function renderTrackRow() {
+  const S = st.S, row = $('trackRow'), t = S.track;
+  if (trkEditing) {
+    const known = Tracks.all().map(x => `<option value="${esc(x.name)}"></option>`).join('');
+    row.innerHTML = `<form class="trk-form" id="trkForm"><label for="trkName" class="big-label" style="width:100%">${t ? 'Rinomina la pista' : 'Nome della pista'}</label>
+      <input id="trkName" list="trkList" autocomplete="off" maxlength="60" placeholder="es. 7 Laghi Kart" value="${t ? esc(t.name) : ''}"><datalist id="trkList">${known}</datalist>
+      <button class="btn primary" type="submit">Salva</button><button class="btn" type="button" id="trkCancel">Annulla</button>
+      <p>${t ? 'Il nuovo nome vale per tutte le sessioni di questa pista.' : 'Le prossime sessioni girate qui verranno riconosciute da sole, dalla posizione GPS e dalla lunghezza del giro.'}</p></form>`;
+    const inp = $('trkName'); inp.focus(); inp.select();
+    $('trkCancel').onclick = () => { trkEditing = false; renderTrackRow(); };
+    $('trkForm').onsubmit = async (e) => {
+      e.preventDefault(); const name = inp.value.trim().replace(/\s+/g, ' ');
+      if (!name) { inp.focus(); return; }
+      if (t) Tracks.upsert({ ...t, name });
+      else { const same = Tracks.all().find(x => x.name.toLowerCase() === name.toLowerCase()); S.track = same || Tracks.create(name, S); }
+      S.track = Tracks.byId((S.track || t).id);
+      trkEditing = false; await syncRecord(String(st.current), S); await refreshSessionList(); toast(`Pista salvata: ${S.track.name}`);
+    };
+    return;
+  }
+  if (!t) { row.innerHTML = `<span class="trk-name unknown">Pista sconosciuta</span><button class="lcd-btn" id="trkSet">Assegna pista</button>`; $('trkSet').onclick = () => { trkEditing = true; renderTrackRow(); }; return; }
+  // personal record across saved sessions on this track
+  const recs = st.sessions.map(s => ({ id: String(s.id), s })).concat(Object.keys(st.mem).map(k => ({ id: k, s: st.mem[k] }))).filter(x => x.s.track === t.id && x.s.best);
+  if (!recs.some(x => x.id === String(st.current))) recs.push({ id: String(st.current), s: { best: S.best.dur, date: S.meta.date } });
+  let rec = ''; if (recs.length > 1) {
+    const top = recs.reduce((a, b) => (b.s.best < a.s.best ? b : a));
+    rec = top.id === String(st.current) ? `<span class="trk-rec">Record personale: <b>questa sessione</b> · ${recs.length} sessioni</span>`
+      : `<span class="trk-rec">Record personale <b>${fmtLap(top.s.best)}</b>${top.s.date ? ' · ' + esc(top.s.date) : ''} · questa sessione ${fmtD(S.best.dur - top.s.best)}</span>`;
+  }
+  row.innerHTML = `<span class="trk-name">${esc(t.name)}</span>${rec}<button class="lcd-btn" id="trkEdit" aria-label="Rinomina la pista">Rinomina</button>`;
+  $('trkEdit').onclick = () => { trkEditing = true; renderTrackRow(); };
+}
+
 // ---------- summary (LCD)
 function renderSummary() {
   const S = st.S, m = S.meta, full = S.laps.filter(l => l.type === 'full');
+  trkEditing = false; renderTrackRow();
   const items = [];
-  if (S.trk && S.trk.name) items.push(['Pista', S.trk.name]);
   if (m.date) items.push(['Data', m.date + (m.time ? ' ' + m.time.slice(0, 5) : '')]);
   if (m.session) items.push(['Sessione', m.session]);
   if (m.loggerId) items.push(['Logger', String(m.loggerId)]);
