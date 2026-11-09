@@ -1,5 +1,5 @@
 // Telemetria Kart – service worker: app shell offline, font in cache dopo il primo uso.
-const VERSION = 'tk-v2';
+const VERSION = 'tk-v3';
 const SHELL = ['./', 'index.html', 'manifest.webmanifest', 'sample.xrz', 'icon-180.png', 'icon-192.png', 'icon-512.png'];
 
 self.addEventListener('install', (e) => {

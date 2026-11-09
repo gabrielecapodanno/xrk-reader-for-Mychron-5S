@@ -402,7 +402,11 @@ const XRK = (() => {
             continue;
           }
           const names = { RCR: 'driver', VEH: 'vehicle', CMP: 'series', VTY: 'session', TMD: 'date', TMT: 'time', NTE: 'comment', NDV: 'device' };
-          if (names[tok]) meta[names[tok]] = cstr(u8, p0, p1);
+          if (names[tok]) {
+            let v = cstr(u8, p0, p1);
+            if (tok === 'TMD') { const m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(v); if (m) v = `${m[2].padStart(2, '0')}/${m[1].padStart(2, '0')}/${m[3]}`; }
+            meta[names[tok]] = v;
+          }
           else if (tok === 'idn' && hlen >= 10) { meta.modelId = dv.getUint16(p0, true); meta.loggerId = dv.getUint32(p0 + 6, true); }
           continue;
         }
@@ -467,7 +471,17 @@ const XRK = (() => {
     for (const k in out) out[k].t = Float64Array.from(out[k].t, x => x - tmin), out[k].v = Float64Array.from(out[k].v);
 
     // keep only valid fixes
-    const keep = []; for (let i = 0; i < nG; i++) if (g.fix[i] >= 2 && (g.lat[i] || g.lon[i])) keep.push(i);
+    // valid u-blox fixes only (2D/3D/GNSS+DR), no null-island positions, no isolated position jumps
+    const keep = [];
+    for (let i = 0; i < nG; i++) {
+      if (g.fix[i] < 2 || g.fix[i] > 5 || Math.hypot(g.lat[i], g.lon[i]) < 1) continue;
+      if (keep.length) {
+        const j = keep[keep.length - 1], dt = Math.max(0.04, (g.t[i] - g.t[j]) / 1000);
+        const dy = (g.lat[i] - g.lat[j]) * 111000, dx = (g.lon[i] - g.lon[j]) * 111000 * Math.cos(g.lat[j] * Math.PI / 180);
+        if (Math.hypot(dx, dy) > 50 + Math.max(g.speed[i], g.speed[j], 5) * dt * 3) { if (keep.length < 5) keep.length = 0; else continue; }
+      }
+      keep.push(i);
+    }
     const gf = {}; for (const k in g) gf[k] = g[k].constructor.from(keep, i => g[k][i]);
 
     // official laps (LAP messages, segment 0)
@@ -529,8 +543,9 @@ function analyze(parsed, name) {
   for (let i = 1; i < n; i++) D[i] = D[i - 1] + (g.speed[i] + g.speed[i - 1]) / 2 * (T[i] - T[i - 1]) / 1000;
   // longitudinal g from GPS speed, lateral g from accelerometer (fallback GPS)
   const lonG = new Float64Array(n), latGgps = new Float64Array(n);
+  const gdt = Math.max(0.02, (T[n - 1] - T[0]) / 1000 / (n - 1)), kd = Math.max(1, Math.round(0.12 / gdt)), sw = Math.max(3, Math.round(0.35 / gdt) | 1);
   for (let i = 0; i < n; i++) {
-    const a = Math.max(0, i - 1), b = Math.min(n - 1, i + 1), dt = (T[b] - T[a]) / 1000 || 1;
+    const a = Math.max(0, i - kd), b = Math.min(n - 1, i + kd), dt = (T[b] - T[a]) / 1000 || 1;
     lonG[i] = (g.speed[b] - g.speed[a]) / dt / 9.81;
     let dh = g.heading[b] - g.heading[a]; if (dh > 180) dh -= 360; if (dh < -180) dh += 360;
     latGgps[i] = g.speed[i] * dh / dt * Math.PI / 180 / 9.81;
@@ -543,8 +558,8 @@ function analyze(parsed, name) {
     // orient so that right-hand turns are positive (match GPS-derived sign)
     let s = 0; for (let i = 0; i < n; i += 3) s += interp(accY.t, accY.v, T[i]) * latGgps[i];
     const sign = s < 0 ? -1 : 1; latG = { t: accY.t, v: smooth(Float64Array.from(accY.v, x => x * sign), 5) };
-  } else latG = { t: T, v: smooth(latGgps, 3) };
-  const lonGs = { t: T, v: smooth(lonG, 3) };
+  } else latG = { t: T, v: smooth(latGgps, sw) };
+  const lonGs = { t: T, v: smooth(lonG, sw) };
 
   // laps
   let laps = parsed.laps.map(l => ({ num: l.lap, start: Math.max(l.start, T[0]), end: Math.min(l.end, T[n - 1]), dur: l.dur, splits: l.splits || null, src: 'mychron' }));
@@ -597,7 +612,7 @@ function analyze(parsed, name) {
   const ideal = bestSec.every(x => x != null) ? bestSec.reduce((a, b) => a + b, 0) : null;
   let sd = null; if (full.length > 2) { const m = full.reduce((a, l) => a + l.dur, 0) / full.length; sd = Math.sqrt(full.reduce((a, l) => a + (l.dur - m) ** 2, 0) / (full.length - 1)); }
   const sf = { x: best.x[0], y: best.y[0], hx: best.x[Math.min(3, best.x.length - 1)] - best.x[0], hy: best.y[Math.min(3, best.y.length - 1)] - best.y[0] };
-  return { name, lat0, lon0, meta: parsed.meta, trk: parsed.trk, T, X, Y, V, D, rpm, latG, lonG: lonGs, laps, best, bestSec, nSec, ideal, sd, splitPts, sf, lapSrc: laps[0].src,
+  return { name, lat0, lon0, medDur: med, meta: parsed.meta, trk: parsed.trk, T, X, Y, V, D, rpm, latG, lonG: lonGs, laps, best, bestSec, nSec, ideal, sd, splitPts, sf, lapSrc: laps[0].src,
     vmax: Math.max(...valid.map(l => l.vmax)), rpmMax: rpm ? Math.max(...valid.map(l => l.rpmMax || 0)) : null };
 }
 
@@ -848,10 +863,11 @@ const esc = (s) => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;
 // ---------- lap table
 function renderLaps() {
   const S = st.S, nS = S.nSec;
+  const med0 = S.medDur * 0.8;
   const maxD = Math.max(500, ...S.laps.filter(l => l.type === 'full').map(l => l.dur - S.best.dur));
   let h = `<thead><tr><th>Giro</th><th style="text-align:center">A · B</th><th>Tempo</th><th>Δ migliore</th>${Array.from({ length: nS }, (_, k) => `<th>S${k + 1}</th>`).join('')}<th>V max</th><th>V min</th></tr></thead><tbody>`;
   for (const l of S.laps) {
-    const tag = l.type === 'out' ? '<span class="tag">uscita</span>' : l.type === 'in' ? '<span class="tag">rientro</span>' : l.type === 'slow' ? '<span class="tag">lento</span>' : l.isBest ? '<span class="tag best">best</span>' : '';
+    const tag = l.type === 'out' ? '<span class="tag">uscita</span>' : l.type === 'in' ? '<span class="tag">rientro</span>' : l.type === 'slow' ? `<span class="tag">${l.dur < med0 ? 'parziale' : 'lento'}</span>` : l.isBest ? '<span class="tag best">best</span>' : '';
     const d = l.dur - S.best.dur, muted = l.type !== 'full';
     const bw = muted || l.isBest ? 0 : Math.round(clamp(d / maxD, 0, 1) * 46) + 2;
     const secs = Array.from({ length: nS }, (_, k) => { const v = l.sectors ? l.sectors[k] : null; const isB = v != null && S.bestSec[k] === v && l.type === 'full'; return `<td class="${isB ? 'sec-best' : ''}">${v != null ? fmtSec(v) : '–'}</td>`; }).join('');
@@ -888,7 +904,7 @@ function drawMap() {
   const S = st.S, C = st.C, cv = $('map');
   const w = cv.parentElement.clientWidth - 20;
   let minx = Infinity, maxx = -Infinity, miny = Infinity, maxy = -Infinity;
-  for (const l of S.laps) if (l.type !== 'out' && l.type !== 'in') for (let i = 0; i < l.x.length; i++) { minx = Math.min(minx, l.x[i]); maxx = Math.max(maxx, l.x[i]); miny = Math.min(miny, l.y[i]); maxy = Math.max(maxy, l.y[i]); }
+  for (const [xs, ys] of [[C.xA, C.yA], [C.xB, C.yB]]) for (let i = 0; i < NG; i++) if (isFinite(xs[i]) && isFinite(ys[i])) { minx = Math.min(minx, xs[i]); maxx = Math.max(maxx, xs[i]); miny = Math.min(miny, ys[i]); maxy = Math.max(maxy, ys[i]); }
   if (!isFinite(minx)) for (let i = 0; i < S.X.length; i++) { minx = Math.min(minx, S.X[i]); maxx = Math.max(maxx, S.X[i]); miny = Math.min(miny, S.Y[i]); maxy = Math.max(maxy, S.Y[i]); }
   const pad = 26, aspect = (maxy - miny) / (maxx - minx || 1);
   const h = clamp(Math.round((w - 2 * pad) * aspect + 2 * pad), 220, Math.max(260, Math.min(560, window.innerHeight * .62)));
